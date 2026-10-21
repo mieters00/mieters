@@ -368,6 +368,7 @@ const SPELLEN = {
     reactie: { naam: 'Reactietest', laag: true, eenheid: ' ms' },
     mol:     { naam: 'Mep de mol', laag: false },
     rps:     { naam: 'Steen papier schaar', laag: false },
+    rit:     { naam: 'Gekke rit', laag: false, geenScores: true },
 };
 
 function games(spel) {
@@ -375,7 +376,7 @@ function games(spel) {
     app.innerHTML = `<h2>Spellen</h2>
         <div class="spel-tabs">${Object.entries(SPELLEN).map(([k, s]) => `<a href="#/games/${k}" class="${k === spel ? 'actief' : ''}">${s.naam}</a>`).join('')}</div>
         <div class="spel-wrap"><div id="speelveld"></div><div id="scores"></div></div>`;
-    ({ snake, memory, klikker, reactie, mol, rps })[spel]();
+    ({ snake, memory, klikker, reactie, mol, rps, rit })[spel]();
     laadScores(spel, SPELLEN[spel].laag);
 }
 
@@ -389,6 +390,7 @@ async function bewaarScore(spel, score, laagIsBeter) {
 }
 
 async function laadScores(spel, laagIsBeter) {
+    if (SPELLEN[spel].geenScores) { if ($('scores')) $('scores').innerHTML = ''; return; }
     const { data } = await sb.from('highscores').select('score,profiles(username,avatar)')
         .eq('game', spel).order('score', { ascending: laagIsBeter }).limit(10);
     const el = $('scores');
@@ -596,6 +598,131 @@ function rps() {
         $('uitslag').textContent = `Jij: ${opties[jij][0]}  Computer: ${opties[pc][0]} · ${tekst}`;
         $('score').textContent = `Reeks: ${reeks}`;
     });
+}
+
+// Gekke rit: een eigen autospel (geen kopie van een bestaand spel). Rij naar de finish zonder te crashen.
+function rit() {
+    const W = 640, H = 320, L = 22, R = 9, G = 0.35;
+    const LEVELS = [
+        { punten: [[0, 240], [700, 240], [900, 170], [1100, 240], [1500, 240], [1700, 190], [1900, 240], [2500, 240]], gaten: [], finish: 2350 },
+        { punten: [[0, 240], [600, 240], [780, 190], [930, 190], [1300, 190], [1500, 240], [2200, 240]], gaten: [[780, 930]], finish: 2050 },
+        { punten: [[0, 240], [500, 240], [660, 190], [820, 190], [1000, 190], [1120, 240], [1300, 240], [1400, 200], [1500, 240], [1600, 200], [1700, 240], [1800, 240], [1950, 180], [2120, 180], [2200, 240], [2800, 240]], gaten: [[660, 800], [1950, 2120]], finish: 2650 },
+    ];
+    $('speelveld').innerHTML = `<p id="score"></p><canvas class="rit" width="${W}" height="${H}"></canvas>
+        <div class="ritknoppen"><button id="rem">⬅ Rem</button><button id="gas">Gas ➡</button></div>
+        <p class="levels">${LEVELS.map((_, i) => `<button data-l="${i}">Level ${i + 1}</button>`).join('')}</p>`;
+    const ctx = document.querySelector('canvas.rit').getContext('2d');
+    const toets = { gas: false, rem: false };
+    let lv, nr, x, y, a, vx, vy, w, stand, timer;
+
+    function grond(px) {
+        if (lv.gaten.some(g => px > g[0] && px < g[1])) return 2000;
+        const p = lv.punten;
+        if (px <= p[0][0]) return p[0][1];
+        for (let i = 1; i < p.length; i++) {
+            if (px <= p[i][0]) {
+                const f = (px - p[i - 1][0]) / (p[i][0] - p[i - 1][0]);
+                return p[i - 1][1] + f * (p[i][1] - p[i - 1][1]);
+            }
+        }
+        return p[p.length - 1][1];
+    }
+    // Zet een punt op de auto (dx, dy) om naar een plek in de wereld
+    const punt = (dx, dy) => ({ x: x + Math.cos(a) * dx - Math.sin(a) * dy, y: y + Math.sin(a) * dx + Math.cos(a) * dy });
+
+    function start(n) {
+        nr = n;
+        lv = LEVELS[n];
+        x = 80; y = grond(80) - 30; a = 0; vx = vy = w = 0;
+        stand = 'rijden';
+        $('score').textContent = `Level ${n + 1}: haal de finish!`;
+        clearInterval(timer);
+        timer = setInterval(() => { if (stand === 'rijden') stap(); teken(); }, 1000 / 60);
+    }
+    function dood() {
+        stand = 'dood';
+        $('score').innerHTML = `Gecrasht! <button id="opnieuw">Opnieuw</button>`;
+        $('opnieuw').onclick = () => start(nr);
+    }
+    function gewonnen() {
+        stand = 'gewonnen';
+        if (nr + 1 < LEVELS.length) {
+            $('score').innerHTML = `Gehaald! <button id="volgende">Volgend level</button>`;
+            $('volgende').onclick = () => start(nr + 1);
+        } else $('score').textContent = 'Alle levels gehaald! Je bent een held 🏆';
+    }
+
+    function stap() {
+        vy += G;
+        const f = punt(L, 8), r = punt(-L, 8);
+        const pf = f.y + R - grond(f.x), pr = r.y + R - grond(r.x);
+        const cf = pf > 0, cr = pr > 0;
+        if (cf && cr) {                                   // beide wielen op de grond
+            y -= Math.min((pf + pr) / 2, 14);
+            const s = Math.atan2(grond(f.x) - grond(r.x), f.x - r.x);
+            a += (s - a) * 0.35;
+            w = 0;
+            let v = vx * Math.cos(s) + vy * Math.sin(s);
+            v += (toets.gas ? 0.25 : 0) - (toets.rem ? 0.22 : 0);
+            v *= toets.gas ? 0.98 : 0.99;
+            v = Math.max(v, -5);
+            vx = v * Math.cos(s);
+            vy = v * Math.sin(s);
+        } else if (cf || cr) {                            // één wiel: de auto kantelt
+            y -= Math.min(cf ? pf : pr, 14);
+            if (vy > 0) vy *= 0.2;
+            w += cf ? -0.006 : 0.006;
+        }
+        x += vx; y += vy; a += w; w *= 0.985;
+        if (a > Math.PI) a -= 2 * Math.PI;
+        if (a < -Math.PI) a += 2 * Math.PI;
+        const daken = [punt(10, -22), punt(-10, -22)];
+        if (y > 700 || daken.some(p => p.y > grond(p.x) - 2)) return dood();
+        if (x > lv.finish) gewonnen();
+    }
+
+    function teken() {
+        const cam = Math.max(0, x - 180);
+        ctx.fillStyle = '#9bd1ff';
+        ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = '#5b8c3a';
+        ctx.beginPath();
+        ctx.moveTo(0, H);
+        for (let px = 0; px <= W; px += 4) ctx.lineTo(px, Math.min(grond(px + cam), H));
+        ctx.lineTo(W, H);
+        ctx.fill();
+        const fx = lv.finish - cam, fy = grond(lv.finish);   // finishvlag
+        ctx.fillStyle = '#222';
+        ctx.fillRect(fx, fy - 70, 4, 70);
+        ctx.fillStyle = '#ef4444';
+        ctx.fillRect(fx + 4, fy - 70, 28, 18);
+        ctx.save();
+        ctx.translate(x - cam, y);
+        ctx.rotate(a);
+        ctx.fillStyle = '#f59e0b';
+        ctx.fillRect(-30, -14, 60, 18);
+        ctx.fillRect(-10, -24, 26, 12);
+        ctx.fillStyle = '#111';
+        [-L, L].forEach(wx => { ctx.beginPath(); ctx.arc(wx, 8, R, 0, 7); ctx.fill(); });
+        ctx.restore();
+    }
+
+    const sleutel = (e, aan) => {
+        const k = e.key.toLowerCase();
+        if (k === 'arrowright' || k === 'd') { toets.gas = aan; e.preventDefault(); }
+        if (k === 'arrowleft' || k === 'a') { toets.rem = aan; e.preventDefault(); }
+    };
+    const omlaag = e => sleutel(e, true), omhoog = e => sleutel(e, false);
+    document.addEventListener('keydown', omlaag);
+    document.addEventListener('keyup', omhoog);
+    ['gas', 'rem'].forEach(n => {
+        const b = $(n);
+        b.onpointerdown = () => { toets[n] = true; };
+        b.onpointerup = b.onpointerleave = b.onpointercancel = () => { toets[n] = false; };
+    });
+    document.querySelectorAll('[data-l]').forEach(b => b.onclick = () => start(Number(b.dataset.l)));
+    cleanup.push(() => { clearInterval(timer); document.removeEventListener('keydown', omlaag); document.removeEventListener('keyup', omhoog); });
+    start(0);
 }
 
 // ---------- Start ----------

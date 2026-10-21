@@ -159,3 +159,8 @@ canvas.snake { width: min(300px, 100%); border-radius: 12px; display: block; tou
 .rps { display: flex; gap: 10px; }
 .rps button { width: 92px; height: 92px; font-size: 28px; line-height: 1.2; background: var(--kaart); color: var(--tekst); box-shadow: var(--schaduw); }
 #uitslag { padding-top: 12px; }
+
+canvas.rit { width: 100%; max-width: 640px; border-radius: 12px; display: block; touch-action: none; }
+.ritknoppen { display: flex; gap: 10px; margin-top: 10px; max-width: 640px; }
+.ritknoppen button { flex: 1; height: 56px; font-size: 18px; touch-action: none; user-select: none; -webkit-user-select: none; }
+.levels button { margin: 6px 6px 0 0; }
