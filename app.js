@@ -172,7 +172,8 @@ async function profile() {
         <div class="fotos">${(fotos || []).map(r => `
             <div class="foto-item klein"><img src="${esc(pub('photos', r.path))}">
             <button class="x" data-id="${r.id}" data-pad="${esc(r.path)}">×</button>
-            ${r.description ? `<p class="beschr">${esc(r.description)}</p>` : ''}</div>`).join('')}</div>`;
+            ${r.description ? `<p class="beschr">${esc(r.description)}</p>` : ''}</div>`).join('')}</div>
+        <p class="gevaar"><a href="#" id="del">Account verwijderen</a></p>`;
 
     $('pf').onsubmit = async e => {
         e.preventDefault();
@@ -183,6 +184,15 @@ async function profile() {
             me.avatar = pad;
             profile();
         } catch (err) { $('fout').textContent = err.message; }
+    };
+    $('del').onclick = async e => {
+        e.preventDefault();
+        if (!confirm('Dit verwijdert je account en al je foto\'s, berichten en botgesprekken permanent. Weet je het zeker?')) return;
+        const { data: res, error } = await sb.functions.invoke('account-verwijderen');
+        if (error || !res || !res.ok) { toast((res && res.bericht) || 'Account verwijderen is niet gelukt.'); return; }
+        await sb.auth.signOut({ scope: 'local' });
+        me = null;
+        location.hash = '#/';
     };
     $('uit').onclick = async () => { await sb.auth.signOut(); me = null; location.hash = '#/'; };
     app.querySelectorAll('.x').forEach(b => b.onclick = async () => {
