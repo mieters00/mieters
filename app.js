@@ -66,19 +66,16 @@ async function route() {
 }
 
 // ---------- Pagina's ----------
-async function home() {
-    app.innerHTML = `<h1 class="kop">${me ? 'Hé ' + esc(me.username) : 'Mieters'}</h1>
-        <p class="intro">${me
-            ? 'Dit zijn de nieuwste foto\'s.'
-            : 'Foto\'s en berichten voor ons. <a href="#/login">Inloggen</a> of <a href="#/register">account maken</a>.'}</p>
-        <div id="nieuw" class="fotos"></div>
-        <p class="meer"><a href="#/photos">Alle foto's →</a></p>`;
-    const { data } = await sb.from('photos').select('path,description,profiles(username,avatar)').order('created_at', { ascending: false }).limit(8);
-    $('nieuw').innerHTML = (data || []).map(r => `
-        <div class="foto-item"><img src="${esc(pub('photos', r.path))}">
-        <div class="rij">${avatar(r.profiles)}<p>${esc(r.profiles && r.profiles.username)}</p></div>
-        ${r.description ? `<p class="beschr">${esc(r.description)}</p>` : ''}</div>`).join('') || '<p class="leeg">Nog geen foto\'s.</p>';
-    $('nieuw').onclick = e => { if (e.target.tagName === 'IMG' && !e.target.classList.contains('av')) location.hash = '#/photos'; };
+function home() {
+    app.innerHTML = `<section class="hero"><h1>${me ? 'Hallo ' + esc(me.username) + '!' : 'Welkom bij Mieters'}</h1>
+        <p>Deel foto's en chat met je vrienden.</p>
+        <div class="hero-knoppen">${me
+            ? '<a class="knop" href="#/chat">Naar je chats</a><a class="knop licht" href="#/photos">Bekijk foto\'s</a>'
+            : '<a class="knop" href="#/register">Account maken</a><a class="knop licht" href="#/login">Inloggen</a>'}</div></section>
+        <section class="kaarten">
+        <a class="kaart" href="#/chat"><span>💬</span><h3>Chat</h3><p>Stuur berichten, live en met leesbevestiging.</p></a>
+        <a class="kaart" href="#/photos"><span>📷</span><h3>Foto's</h3><p>Deel foto's met een beschrijving en @vermeldingen.</p></a>
+        <a class="kaart" href="#/profile"><span>👤</span><h3>Profiel</h3><p>Beheer je profielfoto en je eigen foto's.</p></a></section>`;
 }
 
 function login() {
