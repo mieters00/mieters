@@ -120,3 +120,8 @@ button:hover { filter: brightness(1.1); }
 .quote:empty { display: none; }
 .quote small { color: var(--zacht); text-transform: uppercase; letter-spacing: .08em; font-size: 11px; }
 .quote p { font-size: 1.15rem; font-style: italic; margin-top: 6px; }
+
+.bijlage { cursor: pointer; font-size: 22px; display: flex; align-items: center; padding: 0 4px; }
+.chat-foto { max-width: 260px; max-height: 300px; width: 100%; border-radius: 10px; display: block; margin-bottom: 4px; }
+.bericht:has(.chat-foto) { padding: 4px; }
+.bericht:has(.chat-foto) .bericht-voet { padding: 0 6px 2px; }

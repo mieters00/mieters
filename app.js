@@ -217,6 +217,18 @@ async function profile() {
     });
 }
 
+// Afbeeldingen in de chat staan in een privé opslag; hiermee halen we tijdelijke links op (en onthouden ze)
+const urlCache = {};
+async function chatUrls(paden) {
+    const nu = Date.now();
+    const nodig = paden.filter(p => !urlCache[p] || urlCache[p].tot < nu);
+    if (nodig.length) {
+        const { data } = await sb.storage.from('chat').createSignedUrls(nodig, 3600);
+        (data || []).forEach(x => { if (x.signedUrl) urlCache[x.path] = { url: x.signedUrl, tot: nu + 3300 * 1000 }; });
+    }
+    return urlCache;
+}
+
 async function chat(met) {
     app.innerHTML = `<div class="whatsapp"><div class="contacten"><div class="contacten-header"><h3>Chats</h3></div>
         <div id="lijst"></div></div><div class="chatvenster" id="venster"></div></div>`;
@@ -225,7 +237,7 @@ async function chat(met) {
     document.querySelector('.whatsapp').classList.toggle('open', !!andere);
 
     async function laadLijst() {
-        const { data } = await sb.from('messages').select('sender,recipient,body,created_at,hidden_by_sender,hidden_by_recipient').order('created_at', { ascending: false }).limit(500);
+        const { data } = await sb.from('messages').select('sender,recipient,body,image,created_at,hidden_by_sender,hidden_by_recipient').order('created_at', { ascending: false }).limit(500);
         const laatste = {};
         (data || []).forEach(m => {
             const eigen = m.sender === me.id;
@@ -238,7 +250,7 @@ async function chat(met) {
         $('lijst').innerHTML = lijst.map(u => `
             <a class="contact ${u.username === met ? 'actief' : ''}" href="#/chat/${encodeURIComponent(u.username)}">
                 ${avatar(u, 45)}<div class="contact-info"><strong>${esc(u.username)}</strong>
-                <span>${esc(laatste[u.id] ? laatste[u.id].body : 'Nog geen berichten')}</span></div></a>`).join('');
+                <span>${esc(laatste[u.id] ? (laatste[u.id].image ? '📷 Foto' : laatste[u.id].body) : 'Nog geen berichten')}</span></div></a>`).join('');
     }
 
     async function laadBerichten() {
@@ -246,11 +258,13 @@ async function chat(met) {
         const { data } = await sb.from('messages').select('*')
             .or(`and(sender.eq.${me.id},recipient.eq.${andere.id}),and(sender.eq.${andere.id},recipient.eq.${me.id})`).order('created_at');
         const zichtbaar = (data || []).filter(m => !(m.sender === me.id ? m.hidden_by_sender : m.hidden_by_recipient));
+        const cache = await chatUrls(zichtbaar.filter(m => m.image).map(m => m.image));
+        const fotoUrl = p => (cache[p] && cache[p].url) || '';
         $('chat').innerHTML = zichtbaar.map(m => {
             const eigen = m.sender === me.id;
             const tijd = new Date(m.created_at).toLocaleString('nl-NL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
             return `<div class="bericht-rij ${eigen ? 'eigen' : ''}">${avatar(eigen ? me : andere)}
-                <div class="bericht">${esc(m.body)}<div class="bericht-voet"><span>${tijd}</span>
+                <div class="bericht">${m.image ? `<a href="${esc(fotoUrl(m.image))}" target="_blank" rel="noopener"><img class="chat-foto" src="${esc(fotoUrl(m.image))}"></a>` : ''}${esc(m.body)}<div class="bericht-voet"><span>${tijd}</span>
                 ${eigen ? `<span class="vinkje ${m.read ? 'gelezen' : ''}">✓✓</span>` : ''}</div></div></div>`;
         }).join('');
         $('chat').scrollTop = $('chat').scrollHeight;
@@ -263,7 +277,7 @@ async function chat(met) {
     } else {
         $('venster').innerHTML = `<div class="chat-header"><a class="terug" href="#/chat">←</a>${avatar(andere, 40)}<strong style="flex:1">${esc(andere.username)}</strong>
             <button class="header-knop" id="wis">Verwijderen</button></div><div id="chat"></div>
-            <form id="bf"><input name="b" placeholder="Typ een bericht..." autocomplete="off" maxlength="2000" required><button>Versturen</button></form>`;
+            <form id="bf"><label class="bijlage" title="Foto of GIF sturen">📎<input type="file" id="bijlage" accept="image/*" hidden></label><input name="b" placeholder="Typ een bericht..." autocomplete="off" maxlength="2000"><button>Versturen</button></form>`;
         $('bf').onsubmit = async e => {
             e.preventDefault();
             const tekst = e.target.b.value.trim();
@@ -273,6 +287,18 @@ async function chat(met) {
             if (error) toast(error.message);
             laadBerichten();
             laadLijst();
+        };
+        $('bijlage').onchange = async e => {
+            const f = e.target.files[0];
+            e.target.value = '';
+            if (!f) return;
+            try {
+                const pad = await upload('chat', f, me.id);
+                const { error } = await sb.from('messages').insert({ sender: me.id, recipient: andere.id, body: '', image: pad });
+                if (error) throw error;
+                laadBerichten();
+                laadLijst();
+            } catch (err) { toast(err.message); }
         };
         $('wis').onclick = async () => {
             if (!confirm('Wil je deze chat verwijderen?')) return;
