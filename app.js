@@ -51,7 +51,7 @@ function renderMenu() {
     const nu = location.hash.replace(/^#\/?/, '').split('/')[0];
     const k = (h, t) => `<a href="#/${h}" class="${nu === h ? 'actief' : ''}">${t}</a>`;
     $('menu').innerHTML = `<a href="#/"><img class="logo" src="image/mieters.png" alt="mieters"></a><div class="links">` +
-        k('', 'Home') + k('chat', 'Chat') + k('photos', "Foto's") +
+        k('', 'Home') + k('chat', 'Chat') + k('photos', "Foto's") + k('games', 'Spellen') +
         (me ? k('profile', avatar(me, 22) + ' Profiel') : k('login', 'Inloggen')) + `</div>`;
 }
 
@@ -61,7 +61,7 @@ async function route() {
     const [naam, arg] = location.hash.replace(/^#\/?/, '').split('/');
     if (['chat', 'profile', 'bot'].includes(naam) && !me) { location.hash = '#/login'; return; }
     renderMenu();
-    const paginas = { login, register, photos, profile, chat, bot };
+    const paginas = { login, register, photos, profile, chat, bot, games };
     await (paginas[naam] || home)(decodeURIComponent(arg || ''));
 }
 
@@ -358,6 +358,244 @@ async function bot() {
         await sb.from('bot_history').delete().eq('user_id', me.id);
         bot();
     };
+}
+
+// ---------- Spellen ----------
+const SPELLEN = {
+    snake:   { naam: 'Snake', laag: false },
+    memory:  { naam: 'Memory', laag: true },
+    klikker: { naam: 'Klikker', laag: false },
+    reactie: { naam: 'Reactietest', laag: true, eenheid: ' ms' },
+    mol:     { naam: 'Mep de mol', laag: false },
+    rps:     { naam: 'Steen papier schaar', laag: false },
+};
+
+function games(spel) {
+    if (!SPELLEN[spel]) spel = 'snake';
+    app.innerHTML = `<h2>Spellen</h2>
+        <div class="spel-tabs">${Object.entries(SPELLEN).map(([k, s]) => `<a href="#/games/${k}" class="${k === spel ? 'actief' : ''}">${s.naam}</a>`).join('')}</div>
+        <div class="spel-wrap"><div id="speelveld"></div><div id="scores"></div></div>`;
+    ({ snake, memory, klikker, reactie, mol, rps })[spel]();
+    laadScores(spel, SPELLEN[spel].laag);
+}
+
+// Bewaart je score alleen als het je beste is (bij Memory is minder zetten beter)
+async function bewaarScore(spel, score, laagIsBeter) {
+    if (!me) return;
+    const { data: oud } = await sb.from('highscores').select('score').eq('game', spel).eq('user_id', me.id).maybeSingle();
+    const beter = !oud || (laagIsBeter ? score < oud.score : score > oud.score);
+    if (beter) await sb.from('highscores').upsert({ game: spel, user_id: me.id, score });
+    laadScores(spel, laagIsBeter);
+}
+
+async function laadScores(spel, laagIsBeter) {
+    const { data } = await sb.from('highscores').select('score,profiles(username,avatar)')
+        .eq('game', spel).order('score', { ascending: laagIsBeter }).limit(10);
+    const el = $('scores');
+    if (!el) return;
+    el.innerHTML = `<h3>Top 10</h3>` + ((data || []).map((r, i) => `
+        <div class="score-rij"><span>${i + 1}.</span>${avatar(r.profiles, 22)}
+        <strong>${esc(r.profiles && r.profiles.username)}</strong><span class="punten">${r.score}${SPELLEN[spel].eenheid || ''}</span></div>`).join('')
+        || '<p class="leeg">Nog geen scores.</p>') + (me ? '' : '<p class="intro">Log in om je score te bewaren.</p>');
+}
+
+function snake() {
+    $('speelveld').innerHTML = `<p id="score">Score: 0</p><canvas class="snake" width="300" height="300"></canvas>
+        <div class="pijlen"><button data-d="0,-1">↑</button><button data-d="-1,0">←</button><button data-d="0,1">↓</button><button data-d="1,0">→</button></div>`;
+    const ctx = document.querySelector('canvas.snake').getContext('2d');
+    const N = 15, S = 20;
+    let slang, richting, volgende, appel, score, timer;
+
+    function nieuw() {
+        slang = [{ x: 7, y: 7 }];
+        richting = volgende = { x: 1, y: 0 };
+        score = 0;
+        $('score').textContent = 'Score: 0';
+        zetAppel();
+        teken();
+        clearInterval(timer);
+        timer = setInterval(stap, 120);
+    }
+    function zetAppel() {
+        do { appel = { x: Math.floor(Math.random() * N), y: Math.floor(Math.random() * N) }; }
+        while (slang.some(s => s.x === appel.x && s.y === appel.y));
+    }
+    function stap() {
+        richting = volgende;
+        const kop = { x: slang[0].x + richting.x, y: slang[0].y + richting.y };
+        if (kop.x < 0 || kop.y < 0 || kop.x >= N || kop.y >= N || slang.some(s => s.x === kop.x && s.y === kop.y)) return einde();
+        slang.unshift(kop);
+        if (kop.x === appel.x && kop.y === appel.y) { score++; $('score').textContent = 'Score: ' + score; zetAppel(); }
+        else slang.pop();
+        teken();
+    }
+    function teken() {
+        ctx.fillStyle = '#10241d';
+        ctx.fillRect(0, 0, 300, 300);
+        ctx.fillStyle = '#ef4444';
+        ctx.fillRect(appel.x * S, appel.y * S, S - 2, S - 2);
+        ctx.fillStyle = '#34d399';
+        slang.forEach(s => ctx.fillRect(s.x * S, s.y * S, S - 2, S - 2));
+    }
+    async function einde() {
+        clearInterval(timer);
+        $('score').innerHTML = `Game over! Score: ${score} <button id="opnieuw">Opnieuw</button>`;
+        $('opnieuw').onclick = nieuw;
+        await bewaarScore('snake', score, false);
+    }
+    function stuur(dx, dy) {
+        if (dx === -richting.x && dy === -richting.y && slang.length > 1) return;   // niet achteruit
+        volgende = { x: dx, y: dy };
+    }
+    const toets = e => {
+        const k = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] }[e.key];
+        if (!k) return;
+        e.preventDefault();
+        stuur(k[0], k[1]);
+    };
+    document.addEventListener('keydown', toets);
+    document.querySelectorAll('.pijlen button').forEach(b => b.onclick = () => stuur(...b.dataset.d.split(',').map(Number)));
+    cleanup.push(() => { clearInterval(timer); document.removeEventListener('keydown', toets); });
+    nieuw();
+}
+
+function memory() {
+    const plaatjes = ['🍎', '🐶', '🚀', '🎸', '🌵', '🍕', '⚽', '🦊'];
+    const kaarten = [...plaatjes, ...plaatjes].sort(() => Math.random() - 0.5);
+    let open = [], zetten = 0, gevonden = 0, wacht = false;
+    $('speelveld').innerHTML = `<p id="score">Zetten: 0</p>
+        <div class="memory">${kaarten.map((k, i) => `<button class="mem" data-i="${i}">?</button>`).join('')}</div>
+        <p><button id="nieuwspel">Nieuw spel</button></p>`;
+    const knoppen = [...document.querySelectorAll('.mem')];
+    $('nieuwspel').onclick = memory;
+    knoppen.forEach(b => b.onclick = () => {
+        const i = Number(b.dataset.i);
+        if (wacht || open.includes(i)) return;
+        b.textContent = kaarten[i];
+        open.push(i);
+        if (open.length < 2) return;
+        zetten++;
+        $('score').textContent = 'Zetten: ' + zetten;
+        const [a, c] = open;
+        open = [];
+        if (kaarten[a] === kaarten[c]) {
+            [a, c].forEach(n => { knoppen[n].disabled = true; knoppen[n].classList.add('klaar'); });
+            if (++gevonden === plaatjes.length) {
+                $('score').textContent = `Gewonnen in ${zetten} zetten!`;
+                bewaarScore('memory', zetten, true);
+            }
+        } else {
+            wacht = true;
+            setTimeout(() => { knoppen[a].textContent = knoppen[c].textContent = '?'; wacht = false; }, 800);
+        }
+    });
+}
+
+function klikker() {
+    $('speelveld').innerHTML = `<p id="score">Klik zo snel je kan! Je hebt 10 seconden.</p><button id="grote" class="groot">KLIK!</button>`;
+    let n = 0, tijd = 10, timer = null;
+    const info = () => { $('score').textContent = `Klikken: ${n} · nog ${tijd} s`; };
+    $('grote').onclick = () => {
+        if (!timer) timer = setInterval(() => { tijd--; info(); if (tijd <= 0) einde(); }, 1000);
+        n++;
+        info();
+    };
+    function einde() {
+        clearInterval(timer);
+        $('grote').disabled = true;
+        $('score').innerHTML = `Klaar! ${n} klikken <button id="opnieuw">Opnieuw</button>`;
+        $('opnieuw').onclick = klikker;
+        bewaarScore('klikker', n, false);
+    }
+    cleanup.push(() => clearInterval(timer));
+}
+
+function reactie() {
+    $('speelveld').innerHTML = `<div id="vlak" class="reactie start">Klik om te starten</div><p id="score"></p>`;
+    let stand = 'start', t0 = 0, timeout;
+    $('vlak').onclick = () => {
+        const v = $('vlak');
+        if (stand === 'start') {
+            stand = 'wacht';
+            v.className = 'reactie wacht';
+            v.textContent = 'Wacht op groen...';
+            timeout = setTimeout(() => { stand = 'nu'; v.className = 'reactie nu'; v.textContent = 'KLIK NU!'; t0 = performance.now(); }, 1500 + Math.random() * 3000);
+        } else if (stand === 'wacht') {
+            clearTimeout(timeout);
+            stand = 'start';
+            v.className = 'reactie start';
+            v.textContent = 'Te vroeg! Klik om opnieuw te proberen';
+        } else {
+            const ms = Math.round(performance.now() - t0);
+            stand = 'start';
+            v.className = 'reactie start';
+            v.textContent = 'Klik om opnieuw te spelen';
+            $('score').textContent = `Jouw tijd: ${ms} ms`;
+            bewaarScore('reactie', ms, true);
+        }
+    };
+    cleanup.push(() => clearTimeout(timeout));
+}
+
+function mol() {
+    $('speelveld').innerHTML = `<p id="score">Mep de mol! Druk op start, je hebt 20 seconden.</p>
+        <div class="gaten">${Array.from({ length: 9 }, (_, i) => `<button class="gat"></button>`).join('')}</div>
+        <p><button id="start">Start</button></p>`;
+    const gaten = [...document.querySelectorAll('.gat')];
+    let score = 0, tijd = 0, actief = -1, wissel, klok;
+    const info = () => { $('score').textContent = `Score: ${score} · nog ${tijd} s`; };
+    function toon() {
+        gaten.forEach(g => g.textContent = '');
+        actief = Math.floor(Math.random() * 9);
+        gaten[actief].textContent = '🐹';
+    }
+    gaten.forEach((g, i) => g.onclick = () => {
+        if (i !== actief) return;
+        score++;
+        actief = -1;
+        g.textContent = '💥';
+        info();
+    });
+    function einde() {
+        clearInterval(wissel);
+        clearInterval(klok);
+        actief = -1;
+        gaten.forEach(g => g.textContent = '');
+        $('score').textContent = `Klaar! Je hebt ${score} mollen gemept.`;
+        bewaarScore('mol', score, false);
+    }
+    $('start').onclick = () => {
+        clearInterval(wissel);
+        clearInterval(klok);
+        score = 0;
+        tijd = 20;
+        info();
+        toon();
+        wissel = setInterval(toon, 750);
+        klok = setInterval(() => { tijd--; info(); if (tijd <= 0) einde(); }, 1000);
+    };
+    cleanup.push(() => { clearInterval(wissel); clearInterval(klok); });
+}
+
+function rps() {
+    const opties = [['🪨', 'Steen'], ['📄', 'Papier'], ['✂️', 'Schaar']];
+    let reeks = 0;
+    $('speelveld').innerHTML = `<p id="score">Win zo vaak mogelijk achter elkaar. Reeks: 0</p>
+        <div class="rps">${opties.map((o, i) => `<button data-i="${i}">${o[0]}<br><small>${o[1]}</small></button>`).join('')}</div>
+        <p id="uitslag"></p>`;
+    document.querySelectorAll('.rps button').forEach(b => b.onclick = () => {
+        const jij = Number(b.dataset.i), pc = Math.floor(Math.random() * 3);
+        let tekst;
+        if (jij === pc) tekst = 'Gelijkspel!';
+        else if ((jij + 2) % 3 === pc) { reeks++; tekst = 'Jij wint!'; }
+        else {
+            tekst = `Verloren... je reeks was ${reeks}.`;
+            if (reeks > 0) bewaarScore('rps', reeks, false);
+            reeks = 0;
+        }
+        $('uitslag').textContent = `Jij: ${opties[jij][0]}  Computer: ${opties[pc][0]} · ${tekst}`;
+        $('score').textContent = `Reeks: ${reeks}`;
+    });
 }
 
 // ---------- Start ----------

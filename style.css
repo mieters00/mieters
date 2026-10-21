@@ -125,3 +125,37 @@ button:hover { filter: brightness(1.1); }
 .chat-foto { max-width: 260px; max-height: 300px; width: 100%; border-radius: 10px; display: block; margin-bottom: 4px; }
 .bericht:has(.chat-foto) { padding: 4px; }
 .bericht:has(.chat-foto) .bericht-voet { padding: 0 6px 2px; }
+
+/* Spellen */
+.spel-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+.spel-tabs a { padding: 8px 16px; border-radius: 999px; background: var(--kaart); color: var(--tekst); text-decoration: none; box-shadow: var(--schaduw); }
+.spel-tabs a.actief { background: var(--primair); color: var(--pt); }
+.spel-wrap { display: flex; gap: 30px; flex-wrap: wrap; align-items: flex-start; }
+#speelveld { min-width: 0; }
+#score { padding: 0 0 8px; font-weight: 600; }
+canvas.snake { width: min(300px, 100%); border-radius: 12px; display: block; touch-action: none; }
+.pijlen { display: grid; grid-template-columns: repeat(3, 56px); gap: 6px; margin-top: 12px; justify-content: center; }
+.pijlen button { height: 48px; padding: 0; }
+.pijlen button:nth-child(1) { grid-column: 2; }
+.pijlen button:nth-child(2) { grid-column: 1; grid-row: 2; }
+.pijlen button:nth-child(3) { grid-column: 2; grid-row: 2; }
+.pijlen button:nth-child(4) { grid-column: 3; grid-row: 2; }
+.memory { display: grid; grid-template-columns: repeat(4, 64px); gap: 8px; margin-bottom: 8px; }
+.mem { height: 64px; font-size: 28px; padding: 0; background: var(--kaart); color: var(--tekst); box-shadow: var(--schaduw); }
+.mem.klaar { background: var(--eigen); }
+.mem:disabled { cursor: default; color: var(--tekst); }
+#scores { min-width: 220px; }
+.score-rij { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--lijn); }
+.score-rij .punten { margin-left: auto; font-weight: 700; }
+
+.spel-tabs { flex-wrap: wrap; }
+.groot { width: 200px; height: 200px; border-radius: 50%; font-size: 28px; display: block; margin: 10px 0; }
+.reactie { width: min(320px, 100%); height: 200px; border-radius: 14px; display: flex; align-items: center; justify-content: center; text-align: center; color: #fff; cursor: pointer; user-select: none; padding: 10px; }
+.reactie.start { background: var(--primair); color: var(--pt); }
+.reactie.wacht { background: #dc2626; }
+.reactie.nu { background: #16a34a; }
+.gaten { display: grid; grid-template-columns: repeat(3, 84px); gap: 10px; margin-bottom: 8px; }
+.gat { height: 84px; font-size: 38px; padding: 0; background: #6b4f2a; border-radius: 50%; }
+.rps { display: flex; gap: 10px; }
+.rps button { width: 92px; height: 92px; font-size: 28px; line-height: 1.2; background: var(--kaart); color: var(--tekst); box-shadow: var(--schaduw); }
+#uitslag { padding-top: 12px; }
