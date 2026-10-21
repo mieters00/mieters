@@ -115,3 +115,8 @@ button:hover { filter: brightness(1.1); }
     .terug { display: block; }
     .bericht { max-width: 85%; }
 }
+
+.quote { max-width: 560px; margin: 0 auto 10px; text-align: center; padding: 0 16px; }
+.quote:empty { display: none; }
+.quote small { color: var(--zacht); text-transform: uppercase; letter-spacing: .08em; font-size: 11px; }
+.quote p { font-size: 1.15rem; font-style: italic; margin-top: 6px; }

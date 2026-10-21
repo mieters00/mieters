@@ -72,10 +72,24 @@ function home() {
         <div class="hero-knoppen">${me
             ? '<a class="knop" href="#/chat">Naar je chats</a><a class="knop licht" href="#/photos">Bekijk foto\'s</a>'
             : '<a class="knop" href="#/register">Account maken</a><a class="knop licht" href="#/login">Inloggen</a>'}</div></section>
+        <section class="quote" id="quote"></section>
         <section class="kaarten">
         <a class="kaart" href="#/chat"><span>💬</span><h3>Chat</h3><p>Stuur berichten, live en met leesbevestiging.</p></a>
         <a class="kaart" href="#/photos"><span>📷</span><h3>Foto's</h3><p>Deel foto's met een beschrijving en @vermeldingen.</p></a>
         <a class="kaart" href="#/profile"><span>👤</span><h3>Profiel</h3><p>Beheer je profielfoto en je eigen foto's.</p></a></section>`;
+    laadQuote();
+}
+
+// Quote van de dag: eerst kijken of hij al is opgeslagen, anders vraagt de functie hem aan de AI
+async function laadQuote() {
+    const dag = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Amsterdam' });
+    let { data } = await sb.from('daily_quotes').select('quote').eq('day', dag).maybeSingle();
+    if (!data) {
+        const r = await sb.functions.invoke('quote');
+        data = r.data && r.data.quote ? r.data : null;
+    }
+    const el = $('quote');
+    if (el && data) el.innerHTML = `<small>Quote van de dag</small><p>${esc(data.quote)}</p>`;
 }
 
 function login() {
