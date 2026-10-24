@@ -377,6 +377,8 @@ function games(spel) {
         <div class="spel-tabs">${Object.entries(SPELLEN).map(([k, s]) => `<a href="#/games/${k}" class="${k === spel ? 'actief' : ''}">${s.naam}</a>`).join('')}</div>
         <div class="spel-wrap"><div id="speelveld"></div><div id="scores"></div></div>`;
     ({ snake, memory, klikker, reactie, mol, rps, rit })[spel]();
+    if (spel === 'rit') $('speelveld').insertAdjacentHTML('beforeend',
+        `<p class="intro">Wil je het echte Drive Mad spelen? <a href="https://poki.com/en/g/drive-mad" target="_blank" rel="noopener">Open het op Poki</a>.</p>`);
     laadScores(spel, SPELLEN[spel].laag);
 }
 
