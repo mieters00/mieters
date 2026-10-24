@@ -606,14 +606,17 @@ function rit() {
     const LEVELS = [
         { punten: [[0, 240], [700, 240], [900, 170], [1100, 240], [1500, 240], [1700, 190], [1900, 240], [2500, 240]], gaten: [], finish: 2350 },
         { punten: [[0, 240], [600, 240], [780, 190], [930, 190], [1300, 190], [1500, 240], [2200, 240]], gaten: [[780, 930]], finish: 2050 },
+        { punten: [[0, 240], [400, 240], [480, 215], [560, 240], [640, 215], [720, 240], [800, 215], [880, 240], [960, 205], [1040, 240], [1120, 240], [1250, 170], [1400, 240], [1900, 240]], gaten: [], finish: 1750 },
+        { punten: [[0, 240], [500, 240], [650, 185], [800, 185], [1000, 185], [1150, 240], [1500, 240], [1650, 185], [1800, 185], [1950, 240], [2400, 240]], gaten: [[650, 800], [1650, 1800]], finish: 2250 },
         { punten: [[0, 240], [500, 240], [660, 190], [820, 190], [1000, 190], [1120, 240], [1300, 240], [1400, 200], [1500, 240], [1600, 200], [1700, 240], [1800, 240], [1950, 180], [2120, 180], [2200, 240], [2800, 240]], gaten: [[660, 800], [1950, 2120]], finish: 2650 },
+        { punten: [[0, 240], [900, 240], [1040, 170], [1240, 170], [1500, 170], [1650, 240], [2300, 240]], gaten: [[1040, 1240]], finish: 2100 },
     ];
     $('speelveld').innerHTML = `<p id="score"></p><canvas class="rit" width="${W}" height="${H}"></canvas>
         <div class="ritknoppen"><button id="rem">⬅ Rem</button><button id="gas">Gas ➡</button></div>
         <p class="levels">${LEVELS.map((_, i) => `<button data-l="${i}">Level ${i + 1}</button>`).join('')}</p>`;
     const ctx = document.querySelector('canvas.rit').getContext('2d');
     const toets = { gas: false, rem: false };
-    let lv, nr, x, y, a, vx, vy, w, stand, timer;
+    let lv, nr, x, y, a, vx, vy, w, stand, timer, draai, cam, stof;
 
     function grond(px) {
         if (lv.gaten.some(g => px > g[0] && px < g[1])) return 2000;
@@ -633,11 +636,16 @@ function rit() {
     function start(n) {
         nr = n;
         lv = LEVELS[n];
-        x = 80; y = grond(80) - 30; a = 0; vx = vy = w = 0;
+        x = 80; y = grond(80) - 30; a = 0; vx = vy = w = 0; draai = 0; cam = 0; stof = [];
         stand = 'rijden';
         $('score').textContent = `Level ${n + 1}: haal de finish!`;
         clearInterval(timer);
-        timer = setInterval(() => { if (stand === 'rijden') stap(); teken(); }, 1000 / 60);
+        timer = setInterval(() => {
+            if (stand === 'rijden') stap();
+            stof.forEach(p => { p.x += p.vx; p.y += p.vy; p.l -= 0.04; });
+            stof = stof.filter(p => p.l > 0);
+            teken();
+        }, 1000 / 60);
     }
     function dood() {
         stand = 'dood';
@@ -668,9 +676,11 @@ function rit() {
             v = Math.max(v, -5);
             vx = v * Math.cos(s);
             vy = v * Math.sin(s);
+            draai += v / R;
+            if (toets.gas && v > 2 && Math.random() < 0.5) stof.push({ x: r.x, y: r.y + R, vx: -vx * 0.2 - Math.random(), vy: -Math.random() * 1.5, l: 1 });
         } else if (cf || cr) {                            // één wiel: de auto kantelt
             y -= Math.min(cf ? pf : pr, 14);
-            if (vy > 0) vy *= 0.2;
+            if (vy > 2.5) vy = -vy * 0.25; else if (vy > 0) vy *= 0.2;   // een kleine stuiter bij hard landen
             w += cf ? -0.006 : 0.006;
         }
         x += vx; y += vy; a += w; w *= 0.985;
@@ -682,29 +692,86 @@ function rit() {
     }
 
     function teken() {
-        const cam = Math.max(0, x - 180);
-        ctx.fillStyle = '#9bd1ff';
+        cam += (Math.max(0, x - 200) - cam) * 0.12;
+        const lucht = ctx.createLinearGradient(0, 0, 0, H);
+        lucht.addColorStop(0, '#6ec1ff');
+        lucht.addColorStop(1, '#d8f0ff');
+        ctx.fillStyle = lucht;
         ctx.fillRect(0, 0, W, H);
-        ctx.fillStyle = '#5b8c3a';
+        ctx.fillStyle = '#fff6b0';
+        ctx.beginPath(); ctx.arc(520, 55, 28, 0, 7); ctx.fill();
+        // bergen op de achtergrond, die langzamer meebewegen
+        [[0.2, '#a9c9e8', 110, 90], [0.4, '#8fb5d8', 70, 60]].forEach(([snel, kleur, hoog, breed]) => {
+            ctx.fillStyle = kleur;
+            ctx.beginPath();
+            ctx.moveTo(0, H);
+            for (let px = 0; px <= W; px += 8) ctx.lineTo(px, 215 - Math.abs(Math.sin((px + cam * snel) / breed)) * hoog);
+            ctx.lineTo(W, H);
+            ctx.fill();
+        });
+        // grond met een grasrandje
+        const top = [];
+        for (let px = 0; px <= W; px += 4) top.push(Math.min(grond(px + cam), H + 10));
+        ctx.fillStyle = '#7a5230';
         ctx.beginPath();
         ctx.moveTo(0, H);
-        for (let px = 0; px <= W; px += 4) ctx.lineTo(px, Math.min(grond(px + cam), H));
+        top.forEach((gy, k) => ctx.lineTo(k * 4, gy));
         ctx.lineTo(W, H);
         ctx.fill();
-        const fx = lv.finish - cam, fy = grond(lv.finish);   // finishvlag
+        ctx.strokeStyle = '#5fae3a';
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        top.forEach((gy, k) => { if (gy >= H) return; (k && top[k - 1] < H) ? ctx.lineTo(k * 4, gy) : ctx.moveTo(k * 4, gy); });
+        ctx.stroke();
+        // finish met een geblokte vlag
+        const fx = lv.finish - cam, fy = grond(lv.finish);
         ctx.fillStyle = '#222';
-        ctx.fillRect(fx, fy - 70, 4, 70);
-        ctx.fillStyle = '#ef4444';
-        ctx.fillRect(fx + 4, fy - 70, 28, 18);
+        ctx.fillRect(fx, fy - 80, 4, 80);
+        for (let rij = 0; rij < 3; rij++) for (let kol = 0; kol < 4; kol++) {
+            ctx.fillStyle = (rij + kol) % 2 ? '#111' : '#fff';
+            ctx.fillRect(fx + 4 + kol * 8, fy - 80 + rij * 8, 8, 8);
+        }
+        // stof
+        stof.forEach(p => {
+            ctx.fillStyle = `rgba(230,220,200,${p.l * 0.6})`;
+            ctx.beginPath(); ctx.arc(p.x - cam, p.y, 3 + (1 - p.l) * 4, 0, 7); ctx.fill();
+        });
+        // schaduw onder de auto
+        const gy = grond(x);
+        if (gy < 1000 && gy - y < 140) {
+            ctx.fillStyle = 'rgba(0,0,0,.25)';
+            ctx.beginPath(); ctx.ellipse(x - cam, gy, 34, 4, 0, 0, 7); ctx.fill();
+        }
+        // de auto
         ctx.save();
         ctx.translate(x - cam, y);
         ctx.rotate(a);
-        ctx.fillStyle = '#f59e0b';
-        ctx.fillRect(-30, -14, 60, 18);
-        ctx.fillRect(-10, -24, 26, 12);
-        ctx.fillStyle = '#111';
-        [-L, L].forEach(wx => { ctx.beginPath(); ctx.arc(wx, 8, R, 0, 7); ctx.fill(); });
+        ctx.fillStyle = '#d93636';
+        ctx.beginPath(); ctx.roundRect(-32, -14, 64, 20, 6); ctx.fill();
+        ctx.fillStyle = '#b52a2a';
+        ctx.beginPath(); ctx.roundRect(-12, -26, 30, 14, 5); ctx.fill();
+        ctx.fillStyle = '#bfe6ff';
+        ctx.fillRect(-8, -23, 12, 8);
+        ctx.fillRect(7, -23, 8, 8);
+        ctx.fillStyle = '#fff3a0';
+        ctx.fillRect(28, -9, 4, 5);
+        [-L, L].forEach(wx => {
+            ctx.save();
+            ctx.translate(wx, 8);
+            ctx.rotate(draai);
+            ctx.fillStyle = '#1a1a1a';
+            ctx.beginPath(); ctx.arc(0, 0, R, 0, 7); ctx.fill();
+            ctx.strokeStyle = '#9aa0a6';
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(-R + 2, 0); ctx.lineTo(R - 2, 0); ctx.moveTo(0, -R + 2); ctx.lineTo(0, R - 2); ctx.stroke();
+            ctx.restore();
+        });
         ctx.restore();
+        // voortgangsbalk bovenin
+        ctx.fillStyle = 'rgba(0,0,0,.25)';
+        ctx.fillRect(20, 12, W - 40, 6);
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(20, 12, (W - 40) * Math.min(1, x / lv.finish), 6);
     }
 
     const sleutel = (e, aan) => {
