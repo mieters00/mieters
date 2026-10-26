@@ -125,3 +125,23 @@ button:hover { filter: brightness(1.1); }
 .chat-foto { max-width: 260px; max-height: 300px; width: 100%; border-radius: 10px; display: block; margin-bottom: 4px; }
 .bericht:has(.chat-foto) { padding: 4px; }
 .bericht:has(.chat-foto) .bericht-voet { padding: 0 6px 2px; }
+
+/* Groepen en zoeken */
+input[type=checkbox] { width: auto; padding: 0; }
+.contacten-header { display: flex; justify-content: space-between; align-items: center; }
+.groep-knop { font-size: 13px; text-decoration: none; background: var(--primair); color: var(--pt); padding: 5px 12px; border-radius: 999px; }
+.zoek { padding: 10px 12px; border-bottom: 1px solid var(--lijn); }
+.zoek input { max-width: none; }
+.afzender { display: block; font-size: 12px; color: var(--primair); margin-bottom: 2px; }
+.beheer { padding: 20px; overflow-y: auto; flex: 1; }
+.ledenlijst { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 16px; max-height: 280px; overflow-y: auto; }
+.lid { display: flex; align-items: center; gap: 8px; font-weight: normal; }
+.lid-rij { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--lijn); }
+.lid-rij span { flex: 1; }
+.klein-knop { background: transparent; color: #dc2626; border: 1px solid var(--lijn); padding: 3px 10px; font-size: 12px; }
+select { padding: 9px 10px; border: 1px solid var(--lijn); border-radius: 10px; background: var(--kaart); color: var(--tekst); font: inherit; }
+a.header-knop { text-decoration: none; display: inline-block; }
+
+.msg-del { background: transparent; border: none; padding: 0 2px; font-size: 11px; opacity: .45; cursor: pointer; filter: none; }
+.msg-del:hover { opacity: 1; background: transparent; filter: none; }
+#nf { margin-bottom: 14px; }
