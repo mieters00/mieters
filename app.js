@@ -46,12 +46,40 @@ function toast(tekst) {
     setTimeout(() => d.remove(), 3500);
 }
 
+// Totaal aantal ongelezen berichten, voor het bolletje bij Chat in het menu en de titel van het tabblad
+let ongelezenTotaal = 0, meldingenKanaal = null;
+async function laadMeldingen() {
+    if (!me) return;
+    const [{ count }, { data: gmsg }, { data: lezen }] = await Promise.all([
+        sb.from('messages').select('id', { count: 'exact', head: true }).eq('recipient', me.id).eq('read', false).eq('hidden_by_recipient', false),
+        sb.from('group_messages').select('group_id,created_at').neq('sender', me.id).order('created_at', { ascending: false }).limit(500),
+        sb.from('group_reads').select('group_id,last_read'),
+    ]);
+    const gelezen = Object.fromEntries((lezen || []).map(r => [r.group_id, r.last_read]));
+    const inGroepen = (gmsg || []).filter(m => !gelezen[m.group_id] || m.created_at > gelezen[m.group_id]).length;
+    ongelezenTotaal = (count || 0) + inGroepen;
+    document.title = (ongelezenTotaal ? `(${ongelezenTotaal}) ` : '') + 'Mieters';
+    renderMenu();
+}
+function startMeldingen() {
+    if (meldingenKanaal) return;
+    meldingenKanaal = sb.channel('meldingen')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, laadMeldingen)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'group_messages' }, laadMeldingen)
+        .subscribe();
+}
+function stopMeldingen() {
+    if (meldingenKanaal) { sb.removeChannel(meldingenKanaal); meldingenKanaal = null; }
+    ongelezenTotaal = 0;
+    document.title = 'Mieters';
+}
+
 // ---------- Menu en router ----------
 function renderMenu() {
     const nu = location.hash.replace(/^#\/?/, '').split('/')[0];
     const k = (h, t) => `<a href="#/${h}" class="${nu === h ? 'actief' : ''}">${t}</a>`;
     $('menu').innerHTML = `<a href="#/"><img class="logo" src="image/mieters.png" alt="mieters"></a><div class="links">` +
-        k('', 'Home') + k('chat', 'Chat') + k('photos', "Foto's") +
+        k('', 'Home') + k('chat', 'Chat' + (ongelezenTotaal ? `<span class="badge" title="Ongelezen berichten">${ongelezenTotaal > 99 ? '99+' : ongelezenTotaal}</span>` : '')) + k('photos', "Foto's") +
         (me ? k('profile', avatar(me, 22) + ' Profiel') : k('login', 'Inloggen')) + `</div>`;
 }
 
@@ -61,6 +89,7 @@ async function route() {
     const [naam, arg] = location.hash.replace(/^#\/?/, '').split('/');
     if (['chat', 'profile', 'bot'].includes(naam) && !me) { location.hash = '#/login'; return; }
     renderMenu();
+    if (me) { startMeldingen(); laadMeldingen(); } else stopMeldingen();
     const paginas = { login, register, photos, profile, chat, bot };
     await (paginas[naam] || home)(decodeURIComponent(arg || ''));
 }
@@ -358,7 +387,7 @@ async function chat(arg) {
             laadGroepBerichten();
             laadLijst();
         };
-        sb.rpc('mark_group_read', { gid: groepId });
+        sb.rpc('mark_group_read', { gid: groepId }).then(laadMeldingen);
     }
     function toonGroep() {
         const eigenaar = groep.created_by === me.id;
