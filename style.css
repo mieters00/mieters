@@ -145,3 +145,10 @@ a.header-knop { text-decoration: none; display: inline-block; }
 .msg-del { background: transparent; border: none; padding: 0 2px; font-size: 11px; opacity: .45; cursor: pointer; filter: none; }
 .msg-del:hover { opacity: 1; background: transparent; filter: none; }
 #nf { margin-bottom: 14px; }
+
+.contact.ongelezen { box-shadow: inset 4px 0 0 var(--primair); }
+.contact.ongelezen .contact-info strong { font-weight: 800; }
+.contact.ongelezen .contact-info span { color: var(--tekst); font-weight: 600; }
+.badge { background: var(--primair); color: var(--pt); border-radius: 999px; min-width: 22px; height: 22px; padding: 0 6px; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+
+.links .badge { background: #dc2626; color: #fff; min-width: 18px; height: 18px; font-size: 11px; padding: 0 5px; }

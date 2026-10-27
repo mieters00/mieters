@@ -46,12 +46,40 @@ function toast(tekst) {
     setTimeout(() => d.remove(), 3500);
 }
 
+// Totaal aantal ongelezen berichten, voor het bolletje bij Chat in het menu en de titel van het tabblad
+let ongelezenTotaal = 0, meldingenKanaal = null;
+async function laadMeldingen() {
+    if (!me) return;
+    const [{ count }, { data: gmsg }, { data: lezen }] = await Promise.all([
+        sb.from('messages').select('id', { count: 'exact', head: true }).eq('recipient', me.id).eq('read', false).eq('hidden_by_recipient', false),
+        sb.from('group_messages').select('group_id,created_at').neq('sender', me.id).order('created_at', { ascending: false }).limit(500),
+        sb.from('group_reads').select('group_id,last_read'),
+    ]);
+    const gelezen = Object.fromEntries((lezen || []).map(r => [r.group_id, r.last_read]));
+    const inGroepen = (gmsg || []).filter(m => !gelezen[m.group_id] || m.created_at > gelezen[m.group_id]).length;
+    ongelezenTotaal = (count || 0) + inGroepen;
+    document.title = (ongelezenTotaal ? `(${ongelezenTotaal}) ` : '') + 'Mieters';
+    renderMenu();
+}
+function startMeldingen() {
+    if (meldingenKanaal) return;
+    meldingenKanaal = sb.channel('meldingen')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, laadMeldingen)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'group_messages' }, laadMeldingen)
+        .subscribe();
+}
+function stopMeldingen() {
+    if (meldingenKanaal) { sb.removeChannel(meldingenKanaal); meldingenKanaal = null; }
+    ongelezenTotaal = 0;
+    document.title = 'Mieters';
+}
+
 // ---------- Menu en router ----------
 function renderMenu() {
     const nu = location.hash.replace(/^#\/?/, '').split('/')[0];
     const k = (h, t) => `<a href="#/${h}" class="${nu === h ? 'actief' : ''}">${t}</a>`;
     $('menu').innerHTML = `<a href="#/"><img class="logo" src="image/mieters.png" alt="mieters"></a><div class="links">` +
-        k('', 'Home') + k('chat', 'Chat') + k('photos', "Foto's") +
+        k('', 'Home') + k('chat', 'Chat' + (ongelezenTotaal ? `<span class="badge" title="Ongelezen berichten">${ongelezenTotaal > 99 ? '99+' : ongelezenTotaal}</span>` : '')) + k('photos', "Foto's") +
         (me ? k('profile', avatar(me, 22) + ' Profiel') : k('login', 'Inloggen')) + `</div>`;
 }
 
@@ -61,6 +89,7 @@ async function route() {
     const [naam, arg] = location.hash.replace(/^#\/?/, '').split('/');
     if (['chat', 'profile', 'bot'].includes(naam) && !me) { location.hash = '#/login'; return; }
     renderMenu();
+    if (me) { startMeldingen(); laadMeldingen(); } else stopMeldingen();
     const paginas = { login, register, photos, profile, chat, bot };
     await (paginas[naam] || home)(decodeURIComponent(arg || ''));
 }
@@ -264,13 +293,13 @@ async function chat(arg) {
     const fmt = d => new Date(d).toLocaleString('nl-NL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 
     // ----- Lijst links, met zoekbalk -----
-    let zoekterm = '', laatsteP = {}, laatsteG = {};
+    let zoekterm = '', laatsteP = {}, laatsteG = {}, ongelezenP = {}, ongelezenG = {};
     function tekenLijst() {
         const q = zoekterm.trim().toLowerCase();
         const tijd = m => (m && m.created_at) || '';
         const items = [
-            ...groepen.map(g => ({ soort: 'groep', id: g.id, naam: g.name, laatste: laatsteG[g.id] })),
-            ...users.map(u => ({ soort: 'prive', id: u.id, naam: u.username, laatste: laatsteP[u.id], u })),
+            ...groepen.map(g => ({ soort: 'groep', id: g.id, naam: g.name, laatste: laatsteG[g.id], ongelezen: ongelezenG[g.id] || 0 })),
+            ...users.map(u => ({ soort: 'prive', id: u.id, naam: u.username, laatste: laatsteP[u.id], ongelezen: ongelezenP[u.id] || 0, u })),
         ].filter(i => !q || i.naam.toLowerCase().includes(q))
          .sort((a, b) => tijd(b.laatste).localeCompare(tijd(a.laatste)) || a.naam.localeCompare(b.naam));
         $('lijst').innerHTML = items.map(i => {
@@ -278,23 +307,32 @@ async function chat(arg) {
             const actief = i.soort === 'groep' ? groepId === i.id : (!gm && arg === i.naam);
             const tekst = i.laatste ? (i.laatste.image ? '📷 Foto' : i.laatste.body) : 'Nog geen berichten';
             const pic = i.soort === 'groep' ? `<div class="av av-leeg" style="width:45px;height:45px">👥</div>` : avatar(i.u, 45);
-            return `<a class="contact ${actief ? 'actief' : ''}" href="${href}">${pic}
-                <div class="contact-info"><strong>${esc(i.naam)}</strong><span>${esc(tekst)}</span></div></a>`;
+            const nieuw = actief ? 0 : i.ongelezen;     // in de chat die je nu leest hoort geen teken te staan
+            return `<a class="contact ${actief ? 'actief' : ''} ${nieuw ? 'ongelezen' : ''}" href="${href}">${pic}
+                <div class="contact-info"><strong>${esc(i.naam)}</strong><span>${esc(tekst)}</span></div>
+                ${nieuw ? `<span class="badge" title="Ongelezen berichten">${nieuw > 99 ? '99+' : nieuw}</span>` : ''}</a>`;
         }).join('') || '<p class="leeg">Niemand gevonden.</p>';
     }
     async function laadLijst() {
-        const [{ data: pm }, { data: gmsg }] = await Promise.all([
-            sb.from('messages').select('sender,recipient,body,image,created_at,hidden_by_sender,hidden_by_recipient').order('created_at', { ascending: false }).limit(500),
-            sb.from('group_messages').select('group_id,body,created_at').order('created_at', { ascending: false }).limit(500),
+        const [{ data: pm }, { data: gmsg }, { data: lezen }] = await Promise.all([
+            sb.from('messages').select('sender,recipient,body,image,read,created_at,hidden_by_sender,hidden_by_recipient').order('created_at', { ascending: false }).limit(500),
+            sb.from('group_messages').select('group_id,sender,body,created_at').order('created_at', { ascending: false }).limit(500),
+            sb.from('group_reads').select('group_id,last_read'),
         ]);
-        laatsteP = {}; laatsteG = {};
+        laatsteP = {}; laatsteG = {}; ongelezenP = {}; ongelezenG = {};
         (pm || []).forEach(m => {
             const eigen = m.sender === me.id;
             if (eigen ? m.hidden_by_sender : m.hidden_by_recipient) return;
             const ander = eigen ? m.recipient : m.sender;
             if (!laatsteP[ander]) laatsteP[ander] = m;
+            if (!eigen && !m.read) ongelezenP[ander] = (ongelezenP[ander] || 0) + 1;
         });
-        (gmsg || []).forEach(m => { if (!laatsteG[m.group_id]) laatsteG[m.group_id] = m; });
+        const gelezen = Object.fromEntries((lezen || []).map(r => [r.group_id, r.last_read]));
+        (gmsg || []).forEach(m => {
+            if (!laatsteG[m.group_id]) laatsteG[m.group_id] = m;
+            if (m.sender !== me.id && (!gelezen[m.group_id] || m.created_at > gelezen[m.group_id]))
+                ongelezenG[m.group_id] = (ongelezenG[m.group_id] || 0) + 1;
+        });
         tekenLijst();
     }
     async function herlaadGroepen() {
@@ -349,6 +387,7 @@ async function chat(arg) {
             laadGroepBerichten();
             laadLijst();
         };
+        sb.rpc('mark_group_read', { gid: groepId }).then(laadMeldingen);
     }
     function toonGroep() {
         const eigenaar = groep.created_by === me.id;
