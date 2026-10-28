@@ -95,18 +95,22 @@ async function route() {
 }
 
 // ---------- Pagina's ----------
-function home() {
-    app.innerHTML = `<section class="hero"><h1>${me ? 'Hallo ' + esc(me.username) + '!' : 'Welkom bij Mieters'}</h1>
-        <p>Deel foto's en chat met je vrienden.</p>
-        <div class="hero-knoppen">${me
-            ? '<a class="knop" href="#/chat">Naar je chats</a><a class="knop licht" href="#/photos">Bekijk foto\'s</a>'
-            : '<a class="knop" href="#/register">Account maken</a><a class="knop licht" href="#/login">Inloggen</a>'}</div></section>
+async function home() {
+    app.innerHTML = `<h1 class="kop">${me ? 'Hé ' + esc(me.username) : 'Mieters'}</h1>
+        <p class="intro">${me
+            ? 'Dit zijn de nieuwste foto\'s.'
+            : 'Foto\'s en berichten voor ons. <a href="#/login">Inloggen</a> of <a href="#/register">account maken</a>.'}</p>
         <section class="quote" id="quote"></section>
-        <section class="kaarten">
-        <a class="kaart" href="#/chat"><span>💬</span><h3>Chat</h3><p>Stuur berichten, live en met leesbevestiging.</p></a>
-        <a class="kaart" href="#/photos"><span>📷</span><h3>Foto's</h3><p>Deel foto's met een beschrijving en @vermeldingen.</p></a>
-        <a class="kaart" href="#/profile"><span>👤</span><h3>Profiel</h3><p>Beheer je profielfoto en je eigen foto's.</p></a></section>`;
+        <div id="nieuw" class="fotos"></div>
+        <p class="meer"><a href="#/photos">Alle foto's →</a></p>`;
     laadQuote();
+    const { data } = await sb.from('photos').select('path,description,profiles(username,avatar)').order('created_at', { ascending: false }).limit(8);
+    if (!$('nieuw')) return;
+    $('nieuw').innerHTML = (data || []).map(r => `
+        <div class="foto-item"><img src="${esc(pub('photos', r.path))}">
+        <div class="rij">${avatar(r.profiles)}<p>${esc(r.profiles && r.profiles.username)}</p></div>
+        ${r.description ? `<p class="beschr">${esc(r.description)}</p>` : ''}</div>`).join('') || '<p class="leeg">Nog geen foto\'s.</p>';
+    $('nieuw').onclick = e => { if (e.target.tagName === 'IMG' && !e.target.classList.contains('av')) location.hash = '#/photos'; };
 }
 
 // Quote van de dag: eerst kijken of hij al is opgeslagen, anders vraagt de functie hem aan de AI
@@ -292,7 +296,7 @@ async function chat(arg) {
     document.querySelector('.whatsapp').classList.toggle('open', !!(andere || groep || nieuweGroep || gm));
     const groepAv = (g, size) => g.avatar
         ? `<img class="av" style="width:${size}px;height:${size}px" src="${esc(pub('avatars', g.avatar))}">`
-        : `<div class="av av-leeg" style="width:${size}px;height:${size}px">👥</div>`;
+        : `<div class="av av-leeg" style="width:${size}px;height:${size}px">${esc((g.name || '?')[0].toUpperCase())}</div>`;
     const fmt = d => new Date(d).toLocaleString('nl-NL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 
     // ----- Lijst links, met zoekbalk -----
@@ -308,7 +312,7 @@ async function chat(arg) {
         $('lijst').innerHTML = items.map(i => {
             const href = i.soort === 'groep' ? `#/chat/groep-${i.id}` : `#/chat/${encodeURIComponent(i.naam)}`;
             const actief = i.soort === 'groep' ? groepId === i.id : (!gm && arg === i.naam);
-            const tekst = i.laatste ? (i.laatste.image ? '📷 Foto' : i.laatste.body) : 'Nog geen berichten';
+            const tekst = i.laatste ? (i.laatste.image ? 'Foto' : i.laatste.body) : 'Nog geen berichten';
             const pic = i.soort === 'groep' ? groepAv(i.g, 45) : avatar(i.u, 45);
             const nieuw = actief ? 0 : i.ongelezen;     // in de chat die je nu leest hoort geen teken te staan
             return `<a class="contact ${actief ? 'actief' : ''} ${nieuw ? 'ongelezen' : ''}" href="${href}">${pic}
@@ -357,7 +361,7 @@ async function chat(arg) {
             const eigen = m.sender === me.id;
             return `<div class="bericht-rij ${eigen ? 'eigen' : ''}">${avatar(eigen ? me : andere)}
                 <div class="bericht">${m.image ? `<a href="${esc(fotoUrl(m.image))}" target="_blank" rel="noopener"><img class="chat-foto" src="${esc(fotoUrl(m.image))}"></a>` : ''}${esc(m.body)}<div class="bericht-voet"><span>${fmt(m.created_at)}</span>
-                ${eigen ? `<button class="msg-del" data-id="${m.id}" data-img="${esc(m.image || '')}" title="Bericht verwijderen">🗑</button><span class="vinkje ${m.read ? 'gelezen' : ''}">✓✓</span>` : ''}</div></div></div>`;
+                ${eigen ? `<button class="msg-del" data-id="${m.id}" data-img="${esc(m.image || '')}" title="Bericht verwijderen">verwijder</button><span class="vinkje ${m.read ? 'gelezen' : ''}">✓✓</span>` : ''}</div></div></div>`;
         }).join('');
         $('chat').scrollTop = $('chat').scrollHeight;
         $('chat').onclick = async e => {
@@ -382,7 +386,7 @@ async function chat(arg) {
             const eigen = m.sender === me.id;
             return `<div class="bericht-rij ${eigen ? 'eigen' : ''}">${avatar(eigen ? me : m.profiles)}
                 <div class="bericht">${eigen ? '' : `<strong class="afzender">${esc(m.profiles && m.profiles.username)}</strong>`}${m.image ? `<a href="${esc(fotoUrl(m.image))}" target="_blank" rel="noopener"><img class="chat-foto" src="${esc(fotoUrl(m.image))}"></a>` : ''}${esc(m.body)}
-                <div class="bericht-voet"><span>${fmt(m.created_at)}</span>${eigen ? `<button class="msg-del" data-id="${m.id}" data-img="${esc(m.image || '')}" title="Bericht verwijderen">🗑</button>` : ''}</div></div></div>`;
+                <div class="bericht-voet"><span>${fmt(m.created_at)}</span>${eigen ? `<button class="msg-del" data-id="${m.id}" data-img="${esc(m.image || '')}" title="Bericht verwijderen">verwijder</button>` : ''}</div></div></div>`;
         }).join('');
         $('chat').scrollTop = $('chat').scrollHeight;
         $('chat').onclick = async e => {
@@ -399,7 +403,7 @@ async function chat(arg) {
         $('venster').innerHTML = `<div class="chat-header"><a class="terug" href="#/chat">←</a>
             <a class="kop-link" href="#/chat/groep-${groepId}-info">${groepAv(groep, 40)}<span><strong>${esc(groep.name)}</strong><small>Tik voor groepsinfo</small></span></a></div>
             <div id="chat"></div>
-            <form id="bf"><label class="bijlage" title="Foto of GIF sturen">📎<input type="file" id="gbijlage" accept="image/*" hidden></label><input name="b" placeholder="Typ een bericht..." autocomplete="off" maxlength="2000"><button>Versturen</button></form>`;
+            <form id="bf"><label class="bijlage" title="Foto of GIF sturen">+<input type="file" id="gbijlage" accept="image/*" hidden></label><input name="b" placeholder="Typ een bericht..." autocomplete="off" maxlength="2000"><button>Versturen</button></form>`;
         $('bf').onsubmit = async e => {
             e.preventDefault();
             const tekst = e.target.b.value.trim();
@@ -512,7 +516,7 @@ async function chat(arg) {
     }
     function toonPrive() {
         $('venster').innerHTML = `<div class="chat-header"><a class="terug" href="#/chat">←</a>${avatar(andere, 40)}<strong style="flex:1">${esc(andere.username)}</strong></div><div id="chat"></div>
-            <form id="bf"><label class="bijlage" title="Foto of GIF sturen">📎<input type="file" id="bijlage" accept="image/*" hidden></label><input name="b" placeholder="Typ een bericht..." autocomplete="off" maxlength="2000"><button>Versturen</button></form>`;
+            <form id="bf"><label class="bijlage" title="Foto of GIF sturen">+<input type="file" id="bijlage" accept="image/*" hidden></label><input name="b" placeholder="Typ een bericht..." autocomplete="off" maxlength="2000"><button>Versturen</button></form>`;
         $('bf').onsubmit = async e => {
             e.preventDefault();
             const tekst = e.target.b.value.trim();
