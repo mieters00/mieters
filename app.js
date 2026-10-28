@@ -283,13 +283,16 @@ async function chat(arg) {
 
     const [{ data: gebruikers }, { data: gr }] = await Promise.all([
         sb.from('profiles').select('id,username,avatar').neq('id', me.id).order('username'),
-        sb.from('groups').select('id,name,created_by').order('name'),
+        sb.from('groups').select('id,name,created_by,avatar').order('name'),
     ]);
     const users = gebruikers || [];
     let groepen = gr || [];
     const andere = (!gm && !nieuweGroep) ? users.find(u => u.username === arg) : null;
     const groep = gm ? groepen.find(g => g.id === groepId) : null;
     document.querySelector('.whatsapp').classList.toggle('open', !!(andere || groep || nieuweGroep || gm));
+    const groepAv = (g, size) => g.avatar
+        ? `<img class="av" style="width:${size}px;height:${size}px" src="${esc(pub('avatars', g.avatar))}">`
+        : `<div class="av av-leeg" style="width:${size}px;height:${size}px">👥</div>`;
     const fmt = d => new Date(d).toLocaleString('nl-NL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 
     // ----- Lijst links, met zoekbalk -----
@@ -298,7 +301,7 @@ async function chat(arg) {
         const q = zoekterm.trim().toLowerCase();
         const tijd = m => (m && m.created_at) || '';
         const items = [
-            ...groepen.map(g => ({ soort: 'groep', id: g.id, naam: g.name, laatste: laatsteG[g.id], ongelezen: ongelezenG[g.id] || 0 })),
+            ...groepen.map(g => ({ soort: 'groep', id: g.id, naam: g.name, laatste: laatsteG[g.id], ongelezen: ongelezenG[g.id] || 0, g })),
             ...users.map(u => ({ soort: 'prive', id: u.id, naam: u.username, laatste: laatsteP[u.id], ongelezen: ongelezenP[u.id] || 0, u })),
         ].filter(i => !q || i.naam.toLowerCase().includes(q))
          .sort((a, b) => tijd(b.laatste).localeCompare(tijd(a.laatste)) || a.naam.localeCompare(b.naam));
@@ -306,7 +309,7 @@ async function chat(arg) {
             const href = i.soort === 'groep' ? `#/chat/groep-${i.id}` : `#/chat/${encodeURIComponent(i.naam)}`;
             const actief = i.soort === 'groep' ? groepId === i.id : (!gm && arg === i.naam);
             const tekst = i.laatste ? (i.laatste.image ? '📷 Foto' : i.laatste.body) : 'Nog geen berichten';
-            const pic = i.soort === 'groep' ? `<div class="av av-leeg" style="width:45px;height:45px">👥</div>` : avatar(i.u, 45);
+            const pic = i.soort === 'groep' ? groepAv(i.g, 45) : avatar(i.u, 45);
             const nieuw = actief ? 0 : i.ongelezen;     // in de chat die je nu leest hoort geen teken te staan
             return `<a class="contact ${actief ? 'actief' : ''} ${nieuw ? 'ongelezen' : ''}" href="${href}">${pic}
                 <div class="contact-info"><strong>${esc(i.naam)}</strong><span>${esc(tekst)}</span></div>
@@ -316,7 +319,7 @@ async function chat(arg) {
     async function laadLijst() {
         const [{ data: pm }, { data: gmsg }, { data: lezen }] = await Promise.all([
             sb.from('messages').select('sender,recipient,body,image,read,created_at,hidden_by_sender,hidden_by_recipient').order('created_at', { ascending: false }).limit(500),
-            sb.from('group_messages').select('group_id,sender,body,created_at').order('created_at', { ascending: false }).limit(500),
+            sb.from('group_messages').select('group_id,sender,body,image,created_at').order('created_at', { ascending: false }).limit(500),
             sb.from('group_reads').select('group_id,last_read'),
         ]);
         laatsteP = {}; laatsteG = {}; ongelezenP = {}; ongelezenG = {};
@@ -336,7 +339,7 @@ async function chat(arg) {
         tekenLijst();
     }
     async function herlaadGroepen() {
-        const { data } = await sb.from('groups').select('id,name,created_by').order('name');
+        const { data } = await sb.from('groups').select('id,name,created_by,avatar').order('name');
         groepen = data || [];
         tekenLijst();
     }
@@ -372,18 +375,21 @@ async function chat(arg) {
     // ----- Groepschat -----
     async function laadGroepBerichten() {
         if (!groep || beheer || !$('chat')) return;
-        const { data } = await sb.from('group_messages').select('id,sender,body,created_at,profiles(username,avatar)').eq('group_id', groepId).order('created_at');
+        const { data } = await sb.from('group_messages').select('id,sender,body,image,created_at,profiles(username,avatar)').eq('group_id', groepId).order('created_at');
+        const cache = await chatUrls((data || []).filter(m => m.image).map(m => m.image));
+        const fotoUrl = p => (cache[p] && cache[p].url) || '';
         $('chat').innerHTML = (data || []).map(m => {
             const eigen = m.sender === me.id;
             return `<div class="bericht-rij ${eigen ? 'eigen' : ''}">${avatar(eigen ? me : m.profiles)}
-                <div class="bericht">${eigen ? '' : `<strong class="afzender">${esc(m.profiles && m.profiles.username)}</strong>`}${esc(m.body)}
-                <div class="bericht-voet"><span>${fmt(m.created_at)}</span>${eigen ? `<button class="msg-del" data-id="${m.id}" title="Bericht verwijderen">🗑</button>` : ''}</div></div></div>`;
+                <div class="bericht">${eigen ? '' : `<strong class="afzender">${esc(m.profiles && m.profiles.username)}</strong>`}${m.image ? `<a href="${esc(fotoUrl(m.image))}" target="_blank" rel="noopener"><img class="chat-foto" src="${esc(fotoUrl(m.image))}"></a>` : ''}${esc(m.body)}
+                <div class="bericht-voet"><span>${fmt(m.created_at)}</span>${eigen ? `<button class="msg-del" data-id="${m.id}" data-img="${esc(m.image || '')}" title="Bericht verwijderen">🗑</button>` : ''}</div></div></div>`;
         }).join('');
         $('chat').scrollTop = $('chat').scrollHeight;
         $('chat').onclick = async e => {
             const b = e.target.closest('.msg-del');
             if (!b || !confirm('Wil je dit bericht verwijderen?')) return;
             await sb.from('group_messages').delete().eq('id', b.dataset.id).eq('sender', me.id);
+            if (b.dataset.img) await sb.storage.from('chat').remove([b.dataset.img]);
             laadGroepBerichten();
             laadLijst();
         };
@@ -391,11 +397,11 @@ async function chat(arg) {
     }
     function toonGroep() {
         const eigenaar = groep.created_by === me.id;
-        $('venster').innerHTML = `<div class="chat-header"><a class="terug" href="#/chat">←</a><div class="av av-leeg" style="width:40px;height:40px">👥</div>
+        $('venster').innerHTML = `<div class="chat-header"><a class="terug" href="#/chat">←</a>${groepAv(groep, 40)}
             <strong style="flex:1">${esc(groep.name)}</strong>
             ${eigenaar ? `<a class="header-knop" href="#/chat/groep-${groepId}-beheer">Beheren</a>` : `<button class="header-knop" id="verlaat">Verlaten</button>`}</div>
             <div id="chat"></div>
-            <form id="bf"><input name="b" placeholder="Typ een bericht..." autocomplete="off" maxlength="2000"><button>Versturen</button></form>`;
+            <form id="bf"><label class="bijlage" title="Foto of GIF sturen">📎<input type="file" id="gbijlage" accept="image/*" hidden></label><input name="b" placeholder="Typ een bericht..." autocomplete="off" maxlength="2000"><button>Versturen</button></form>`;
         $('bf').onsubmit = async e => {
             e.preventDefault();
             const tekst = e.target.b.value.trim();
@@ -405,6 +411,18 @@ async function chat(arg) {
             if (error) toast(error.message);
             laadGroepBerichten();
             laadLijst();
+        };
+        $('gbijlage').onchange = async e => {
+            const f = e.target.files[0];
+            e.target.value = '';
+            if (!f) return;
+            try {
+                const pad = await upload('chat', f, me.id);
+                const { error } = await sb.from('group_messages').insert({ group_id: groepId, sender: me.id, body: '', image: pad });
+                if (error) throw error;
+                laadGroepBerichten();
+                laadLijst();
+            } catch (err) { toast(err.message); }
         };
         if (!eigenaar) $('verlaat').onclick = async () => {
             if (!confirm('Wil je deze groep verlaten?')) return;
@@ -420,6 +438,7 @@ async function chat(arg) {
         $('venster').innerHTML = `<div class="chat-header"><a class="terug" href="#/chat/groep-${groepId}">←</a><strong style="flex:1">Groep beheren</strong>
             <a class="header-knop" href="#/chat/groep-${groepId}">Terug naar chat</a></div>
             <div class="beheer"><form id="hn"><label>Groepsnaam</label><br><input name="naam" value="${esc(groep.name)}" maxlength="40" required> <button>Opslaan</button></form>
+            <form id="hf"><label>Groepsfoto</label><br>${groepAv(groep, 60)}<br><input type="file" name="file" accept="image/*" required> <button>Foto opslaan</button> <span class="fout" id="foutf"></span></form>
             <h3>Leden</h3>
             ${(leden || []).map(l => `<div class="lid-rij">${avatar(l.profiles, 28)}<span>${esc(l.profiles && l.profiles.username)}${l.user_id === me.id ? ' (jij)' : ''}</span>
                 ${l.user_id !== me.id ? `<button class="klein-knop" data-uid="${esc(l.user_id)}">Verwijderen</button>` : ''}</div>`).join('')}
@@ -432,6 +451,17 @@ async function chat(arg) {
             groep.name = naam || groep.name;
             herlaadGroepen();
             toonBeheer();
+        };
+        $('hf').onsubmit = async e => {
+            e.preventDefault();
+            try {
+                const pad = await upload('avatars', e.target.file.files[0], me.id);
+                const { error } = await sb.from('groups').update({ avatar: pad }).eq('id', groepId);
+                if (error) throw error;
+                groep.avatar = pad;
+                herlaadGroepen();
+                toonBeheer();
+            } catch (err) { $('foutf').textContent = err.message; }
         };
         document.querySelectorAll('.klein-knop').forEach(b => b.onclick = async () => {
             await sb.from('group_members').delete().eq('group_id', groepId).eq('user_id', b.dataset.uid);
