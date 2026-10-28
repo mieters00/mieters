@@ -145,3 +145,31 @@ a.header-knop { text-decoration: none; display: inline-block; border-radius: var
     .terug { display: block; }
     .bericht { max-width: 85%; }
 }
+
+/* Spellen */
+.spel-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.spel-tabs a { padding: 7px 14px; border: 1px solid var(--lijn); border-radius: var(--r); background: var(--kaart); color: var(--tekst); text-decoration: none; }
+.spel-tabs a.actief { background: var(--primair); color: var(--pt); border-color: var(--primair); }
+.spel-wrap { display: flex; gap: 30px; flex-wrap: wrap; align-items: flex-start; }
+#speelveld { min-width: 0; max-width: 100%; }
+#score { padding: 0 0 8px; font-weight: 600; max-width: 340px; }
+canvas.snake { width: min(300px, 100%); border-radius: var(--r); display: block; touch-action: none; }
+.pijlen { display: grid; grid-template-columns: repeat(3, 56px); gap: 6px; margin-top: 12px; justify-content: center; }
+.pijlen button { height: 48px; padding: 0; }
+.pijlen button:nth-child(1) { grid-column: 2; }
+.pijlen button:nth-child(2) { grid-column: 1; grid-row: 2; }
+.pijlen button:nth-child(3) { grid-column: 2; grid-row: 2; }
+.pijlen button:nth-child(4) { grid-column: 3; grid-row: 2; }
+#scores { min-width: 220px; }
+.score-rij { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--lijn); }
+.score-rij .punten { margin-left: auto; font-weight: 800; }
+.wordle { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+.w-rij { display: grid; grid-template-columns: repeat(5, 52px); gap: 6px; }
+.w-vak { height: 52px; border: 2px solid var(--lijn); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 800; text-transform: uppercase; }
+.w-vak.bezig { border-color: var(--zacht); }
+.w-vak.goed, .toetsen button.goed { background: #2e8b57; border-color: #2e8b57; color: #fff; }
+.w-vak.bijna, .toetsen button.bijna { background: #c99a14; border-color: #c99a14; color: #fff; }
+.w-vak.fout, .toetsen button.fout { background: #6b716d; border-color: #6b716d; color: #fff; }
+.toetsen { display: flex; flex-direction: column; gap: 6px; align-items: center; max-width: 100%; }
+.toetsen div { display: flex; gap: 4px; }
+.toetsen button { min-width: 30px; height: 44px; padding: 0 8px; background: var(--kaart); color: var(--tekst); border: 1px solid var(--lijn); text-transform: uppercase; font-weight: 600; }

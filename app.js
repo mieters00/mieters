@@ -79,7 +79,7 @@ function renderMenu() {
     const nu = location.hash.replace(/^#\/?/, '').split('/')[0];
     const k = (h, t) => `<a href="#/${h}" class="${nu === h ? 'actief' : ''}">${t}</a>`;
     $('menu').innerHTML = `<a href="#/"><img class="logo" src="image/mieters.png" alt="mieters"></a><div class="links">` +
-        k('', 'Home') + k('chat', 'Chat' + (ongelezenTotaal ? `<span class="badge" title="Ongelezen berichten">${ongelezenTotaal > 99 ? '99+' : ongelezenTotaal}</span>` : '')) + k('photos', "Foto's") +
+        k('', 'Home') + k('chat', 'Chat' + (ongelezenTotaal ? `<span class="badge" title="Ongelezen berichten">${ongelezenTotaal > 99 ? '99+' : ongelezenTotaal}</span>` : '')) + k('photos', "Foto's") + k('games', 'Spellen') +
         (me ? k('profile', avatar(me, 22) + ' Profiel') : k('login', 'Inloggen')) + `</div>`;
 }
 
@@ -90,7 +90,7 @@ async function route() {
     if (['chat', 'profile', 'bot'].includes(naam) && !me) { location.hash = '#/login'; return; }
     renderMenu();
     if (me) { startMeldingen(); laadMeldingen(); } else stopMeldingen();
-    const paginas = { login, register, photos, profile, chat, bot };
+    const paginas = { login, register, photos, profile, chat, bot, games };
     await (paginas[naam] || home)(decodeURIComponent(arg || ''));
 }
 
@@ -602,6 +602,173 @@ async function bot() {
         await sb.from('bot_history').delete().eq('user_id', me.id);
         bot();
     };
+}
+
+// ---------- Spellen ----------
+const SPELLEN = {
+    snake:  { naam: 'Snake' },
+    wordle: { naam: 'Woordspel', geenScores: true },
+};
+
+function games(spel) {
+    if (!SPELLEN[spel]) spel = 'snake';
+    app.innerHTML = `<h2>Spellen</h2>
+        <div class="spel-tabs">${Object.entries(SPELLEN).map(([k, s]) => `<a href="#/games/${k}" class="${k === spel ? 'actief' : ''}">${s.naam}</a>`).join('')}</div>
+        <div class="spel-wrap"><div id="speelveld"></div><div id="scores"></div></div>`;
+    ({ snake, wordle })[spel]();
+    laadScores(spel);
+}
+
+// Bewaart je score alleen als het je beste is
+async function bewaarScore(spel, score) {
+    if (!me) return;
+    const { data: oud } = await sb.from('highscores').select('score').eq('game', spel).eq('user_id', me.id).maybeSingle();
+    if (!oud || score > oud.score) await sb.from('highscores').upsert({ game: spel, user_id: me.id, score });
+    laadScores(spel);
+}
+
+async function laadScores(spel) {
+    const el = $('scores');
+    if (!el) return;
+    if (SPELLEN[spel].geenScores) { el.innerHTML = ''; return; }
+    const { data } = await sb.from('highscores').select('score,profiles(username,avatar)')
+        .eq('game', spel).order('score', { ascending: false }).limit(10);
+    el.innerHTML = `<h3>Top 10</h3>` + ((data || []).map((r, i) => `
+        <div class="score-rij"><span>${i + 1}.</span>${avatar(r.profiles, 22)}
+        <strong>${esc(r.profiles && r.profiles.username)}</strong><span class="punten">${r.score}</span></div>`).join('')
+        || '<p class="leeg">Nog geen scores.</p>') + (me ? '' : '<p class="intro">Log in om je score te bewaren.</p>');
+}
+
+function snake() {
+    $('speelveld').innerHTML = `<p id="score">Score: 0</p><canvas class="snake" width="300" height="300"></canvas>
+        <div class="pijlen"><button data-d="0,-1">↑</button><button data-d="-1,0">←</button><button data-d="0,1">↓</button><button data-d="1,0">→</button></div>`;
+    const ctx = document.querySelector('canvas.snake').getContext('2d');
+    const N = 15, S = 20;
+    let slang, richting, volgende, appel, score, timer;
+
+    function nieuw() {
+        slang = [{ x: 7, y: 7 }];
+        richting = volgende = { x: 1, y: 0 };
+        score = 0;
+        $('score').textContent = 'Score: 0';
+        zetAppel();
+        teken();
+        clearInterval(timer);
+        timer = setInterval(stap, 120);
+    }
+    function zetAppel() {
+        do { appel = { x: Math.floor(Math.random() * N), y: Math.floor(Math.random() * N) }; }
+        while (slang.some(s => s.x === appel.x && s.y === appel.y));
+    }
+    function stap() {
+        richting = volgende;
+        const kop = { x: slang[0].x + richting.x, y: slang[0].y + richting.y };
+        if (kop.x < 0 || kop.y < 0 || kop.x >= N || kop.y >= N || slang.some(s => s.x === kop.x && s.y === kop.y)) return einde();
+        slang.unshift(kop);
+        if (kop.x === appel.x && kop.y === appel.y) { score++; $('score').textContent = 'Score: ' + score; zetAppel(); }
+        else slang.pop();
+        teken();
+    }
+    function teken() {
+        ctx.fillStyle = '#10241d';
+        ctx.fillRect(0, 0, 300, 300);
+        ctx.fillStyle = '#e0543c';
+        ctx.fillRect(appel.x * S, appel.y * S, S - 2, S - 2);
+        ctx.fillStyle = '#4fd1a1';
+        slang.forEach(s => ctx.fillRect(s.x * S, s.y * S, S - 2, S - 2));
+    }
+    async function einde() {
+        clearInterval(timer);
+        $('score').innerHTML = `Game over! Score: ${score} <button id="opnieuw">Opnieuw</button>`;
+        $('opnieuw').onclick = nieuw;
+        await bewaarScore('snake', score);
+    }
+    function stuur(dx, dy) {
+        if (dx === -richting.x && dy === -richting.y && slang.length > 1) return;   // niet achteruit
+        volgende = { x: dx, y: dy };
+    }
+    const toets = e => {
+        const k = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] }[e.key];
+        if (!k) return;
+        e.preventDefault();
+        stuur(k[0], k[1]);
+    };
+    document.addEventListener('keydown', toets);
+    document.querySelectorAll('.pijlen button').forEach(b => b.onclick = () => stuur(...b.dataset.d.split(',').map(Number)));
+    cleanup.push(() => { clearInterval(timer); document.removeEventListener('keydown', toets); });
+    nieuw();
+}
+
+// Woordspel: raad elke dag een nieuw woord van 5 letters in 6 pogingen (iedereen krijgt hetzelfde woord)
+const WOORDEN = 'aarde actie adres alarm album alles ander angst appel arend armen asiel baard balen banen basis beeld beest beide beker beleg bende beter beurt bezem bezig bloem bloed blond boden boete bonen boten braaf brand breed brief brood bruin buien buurt chaos clown daken dagen dames datum deken delen diner dieet dwaas draad droom drank druif dwerg eerst eigen eiken emmer enkel fiets flink fluit fruit gaten gebak geluk gerst gezin glans graag graan grens grond groen groot grote haast haken halen halve hamer harde hazen heide helft hemel hoofd hoeve hoger hotel huilt huren idiot jacht jager jaren jonge juist kaart kaars kamer kapot katje keten keuze kerel kerst kleur klein kleed klomp knoop koken komen kopen kopje korte kraan krant kring kroon kruid kunst laars leden leger lente leren lepel leuke licht lopen lucht lunch maken maand macht maart merel meter mogen modem molen motor muren nacht naald naast namen negen niets nodig noten oever onder oogst opera orgel paard paars patat peper pizza plaat plank plant plein poort proef pruim raden raken ramen regen rente saaie salon schip sfeer sinds sjaal slaap slang sluit smaak snoep soort sport staal stoel stoom storm straf strak strik taart tafel tegel tekst thuis toren trein trots uilen vader varen veren vezel visie vogel vraag vrede vrouw vuist vuren waard wagen water weten winst woord wraak zaken zalig zeker zeven zomer zonde zwaar zwart zweet'.split(' ');
+
+function wordle() {
+    const dag = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Amsterdam' });
+    const woord = WOORDEN[(Math.floor(Date.parse(dag) / 86400000) * 7919) % WOORDEN.length];
+    const opslag = 'woordspel:' + dag;
+    let gokken = [], huidig = '';
+    try { gokken = JSON.parse(localStorage.getItem(opslag)) || []; } catch (e) { gokken = []; }
+    $('speelveld').innerHTML = `<p id="score"></p><div class="wordle" id="bord"></div><div class="toetsen" id="toetsen"></div>`;
+
+    function beoordeel(gok) {
+        const uitslag = Array(5).fill('fout'), over = {};
+        for (let i = 0; i < 5; i++) {
+            if (gok[i] === woord[i]) uitslag[i] = 'goed';
+            else over[woord[i]] = (over[woord[i]] || 0) + 1;
+        }
+        for (let i = 0; i < 5; i++) {
+            if (uitslag[i] !== 'goed' && over[gok[i]] > 0) { uitslag[i] = 'bijna'; over[gok[i]]--; }
+        }
+        return uitslag;
+    }
+    const gewonnen = () => gokken.includes(woord);
+    const klaar = () => gewonnen() || gokken.length >= 6;
+
+    function teken() {
+        const rang = { fout: 1, bijna: 2, goed: 3 }, letters = {};
+        let bord = '';
+        for (let r = 0; r < 6; r++) {
+            let vakken = '';
+            const gok = gokken[r];
+            const uitslag = gok ? beoordeel(gok) : null;
+            for (let i = 0; i < 5; i++) {
+                if (gok) {
+                    vakken += `<div class="w-vak ${uitslag[i]}">${gok[i]}</div>`;
+                    if (!letters[gok[i]] || rang[uitslag[i]] > rang[letters[gok[i]]]) letters[gok[i]] = uitslag[i];
+                } else if (r === gokken.length && !klaar()) {
+                    vakken += `<div class="w-vak ${huidig[i] ? 'bezig' : ''}">${huidig[i] || ''}</div>`;
+                } else vakken += `<div class="w-vak"></div>`;
+            }
+            bord += `<div class="w-rij">${vakken}</div>`;
+        }
+        $('bord').innerHTML = bord;
+        const knop = k => `<button data-k="${k}" class="${letters[k] || ''}">${k === 'backspace' ? 'Wis' : k}</button>`;
+        $('toetsen').innerHTML = ['qwertyuiop', 'asdfghjkl'].map(rij => `<div>${[...rij].map(knop).join('')}</div>`).join('')
+            + `<div>${knop('enter')}${[...'zxcvbnm'].map(knop).join('')}${knop('backspace')}</div>`;
+        $('score').textContent = gewonnen() ? `Goed gedaan! Je had het in ${gokken.length} ${gokken.length === 1 ? 'poging' : 'pogingen'}. Morgen komt er een nieuw woord.`
+            : klaar() ? `Helaas, het woord was ${woord.toUpperCase()}. Morgen komt er een nieuw woord.`
+            : 'Raad het woord van vandaag. Je hebt 6 pogingen.';
+    }
+    function toets(k) {
+        if (klaar()) return;
+        if (k === 'enter') {
+            if (huidig.length < 5) { toast('Vul 5 letters in.'); return; }
+            gokken.push(huidig);
+            huidig = '';
+            try { localStorage.setItem(opslag, JSON.stringify(gokken)); } catch (e) { /* niet erg */ }
+        } else if (k === 'backspace') huidig = huidig.slice(0, -1);
+        else if (/^[a-z]$/.test(k) && huidig.length < 5) huidig += k;
+        teken();
+    }
+    $('toetsen').onclick = e => { const k = e.target.dataset.k; if (k) toets(k); };
+    const keydown = e => {
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        const k = e.key.toLowerCase();
+        if (k === 'enter' || k === 'backspace' || /^[a-z]$/.test(k)) { e.preventDefault(); toets(k); }
+    };
+    document.addEventListener('keydown', keydown);
+    cleanup.push(() => document.removeEventListener('keydown', keydown));
+    teken();
 }
 
 // ---------- Start ----------
