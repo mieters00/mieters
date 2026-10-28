@@ -152,3 +152,10 @@ a.header-knop { text-decoration: none; display: inline-block; }
 .badge { background: var(--primair); color: var(--pt); border-radius: 999px; min-width: 22px; height: 22px; padding: 0 6px; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 
 .links .badge { background: #dc2626; color: #fff; min-width: 18px; height: 18px; font-size: 11px; padding: 0 5px; }
+
+.kop-link { display: flex; align-items: center; gap: 12px; text-decoration: none; color: var(--tekst); flex: 1; min-width: 0; }
+.kop-link small { display: block; color: var(--zacht); font-size: 11px; }
+.groep-kop { text-align: center; margin-bottom: 20px; }
+.groep-kop h2 { padding: 10px 0 0; }
+.groep-kop .av { margin: 0 auto; }
+.groep-kop form { margin-top: 10px; }

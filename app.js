@@ -272,9 +272,9 @@ async function chatUrls(paden) {
 }
 
 async function chat(arg) {
-    const gm = /^groep-(\d+)(-beheer)?$/.exec(arg);        // #/chat/groep-12 of #/chat/groep-12-beheer
+    const gm = /^groep-(\d+)(-info)?$/.exec(arg);        // #/chat/groep-12 of #/chat/groep-12-info
     const groepId = gm ? Number(gm[1]) : null;
-    const beheer = !!(gm && gm[2]);
+    const info = !!(gm && gm[2]);
     const nieuweGroep = arg === 'nieuwe-groep';
     app.innerHTML = `<div class="whatsapp"><div class="contacten">
         <div class="contacten-header"><h3>Chats</h3><a href="#/chat/nieuwe-groep" class="groep-knop">+ Groep</a></div>
@@ -374,7 +374,7 @@ async function chat(arg) {
 
     // ----- Groepschat -----
     async function laadGroepBerichten() {
-        if (!groep || beheer || !$('chat')) return;
+        if (!groep || info || !$('chat')) return;
         const { data } = await sb.from('group_messages').select('id,sender,body,image,created_at,profiles(username,avatar)').eq('group_id', groepId).order('created_at');
         const cache = await chatUrls((data || []).filter(m => m.image).map(m => m.image));
         const fotoUrl = p => (cache[p] && cache[p].url) || '';
@@ -396,10 +396,8 @@ async function chat(arg) {
         sb.rpc('mark_group_read', { gid: groepId }).then(laadMeldingen);
     }
     function toonGroep() {
-        const eigenaar = groep.created_by === me.id;
-        $('venster').innerHTML = `<div class="chat-header"><a class="terug" href="#/chat">←</a>${groepAv(groep, 40)}
-            <strong style="flex:1">${esc(groep.name)}</strong>
-            ${eigenaar ? `<a class="header-knop" href="#/chat/groep-${groepId}-beheer">Beheren</a>` : `<button class="header-knop" id="verlaat">Verlaten</button>`}</div>
+        $('venster').innerHTML = `<div class="chat-header"><a class="terug" href="#/chat">←</a>
+            <a class="kop-link" href="#/chat/groep-${groepId}-info">${groepAv(groep, 40)}<span><strong>${esc(groep.name)}</strong><small>Tik voor groepsinfo</small></span></a></div>
             <div id="chat"></div>
             <form id="bf"><label class="bijlage" title="Foto of GIF sturen">📎<input type="file" id="gbijlage" accept="image/*" hidden></label><input name="b" placeholder="Typ een bericht..." autocomplete="off" maxlength="2000"><button>Versturen</button></form>`;
         $('bf').onsubmit = async e => {
@@ -424,34 +422,26 @@ async function chat(arg) {
                 laadLijst();
             } catch (err) { toast(err.message); }
         };
-        if (!eigenaar) $('verlaat').onclick = async () => {
-            if (!confirm('Wil je deze groep verlaten?')) return;
-            await sb.from('group_members').delete().eq('group_id', groepId).eq('user_id', me.id);
-            location.hash = '#/chat';
-        };
         laadGroepBerichten();
     }
-    async function toonBeheer() {
+    async function toonInfo() {
+        const eigenaar = groep.created_by === me.id;
         const { data: leden } = await sb.from('group_members').select('user_id,profiles(username,avatar)').eq('group_id', groepId);
         const lidIds = new Set((leden || []).map(l => l.user_id));
         const nietLeden = users.filter(u => !lidIds.has(u.id));
-        $('venster').innerHTML = `<div class="chat-header"><a class="terug" href="#/chat/groep-${groepId}">←</a><strong style="flex:1">Groep beheren</strong>
+        $('venster').innerHTML = `<div class="chat-header"><a class="terug" href="#/chat/groep-${groepId}">←</a><strong style="flex:1">Groepsinfo</strong>
             <a class="header-knop" href="#/chat/groep-${groepId}">Terug naar chat</a></div>
-            <div class="beheer"><form id="hn"><label>Groepsnaam</label><br><input name="naam" value="${esc(groep.name)}" maxlength="40" required> <button>Opslaan</button></form>
-            <form id="hf"><label>Groepsfoto</label><br>${groepAv(groep, 60)}<br><input type="file" name="file" accept="image/*" required> <button>Foto opslaan</button> <span class="fout" id="foutf"></span></form>
-            <h3>Leden</h3>
-            ${(leden || []).map(l => `<div class="lid-rij">${avatar(l.profiles, 28)}<span>${esc(l.profiles && l.profiles.username)}${l.user_id === me.id ? ' (jij)' : ''}</span>
-                ${l.user_id !== me.id ? `<button class="klein-knop" data-uid="${esc(l.user_id)}">Verwijderen</button>` : ''}</div>`).join('')}
-            ${nietLeden.length ? `<h3>Lid toevoegen</h3><form id="hl"><select name="uid">${nietLeden.map(u => `<option value="${esc(u.id)}">${esc(u.username)}</option>`).join('')}</select> <button>Toevoegen</button></form>` : ''}
-            <p class="gevaar"><a href="#" id="hv">Groep verwijderen</a></p></div>`;
-        $('hn').onsubmit = async e => {
-            e.preventDefault();
-            const naam = e.target.naam.value.trim();
-            if (naam) await sb.from('groups').update({ name: naam }).eq('id', groepId);
-            groep.name = naam || groep.name;
-            herlaadGroepen();
-            toonBeheer();
-        };
+            <div class="beheer">
+                <div class="groep-kop">${groepAv(groep, 90)}<h2>${esc(groep.name)}</h2><p class="intro">${(leden || []).length} leden</p>
+                    <form id="hf"><input type="file" name="file" accept="image/*" required> <button>Groepsfoto wijzigen</button> <span class="fout" id="foutf"></span></form></div>
+                ${eigenaar ? `<form id="hn"><label>Groepsnaam</label><br><input name="naam" value="${esc(groep.name)}" maxlength="40" required> <button>Opslaan</button></form>` : ''}
+                <h3>Leden</h3>
+                ${(leden || []).map(l => `<div class="lid-rij">${avatar(l.profiles, 28)}
+                    <span>${esc(l.profiles && l.profiles.username)}${l.user_id === me.id ? ' (jij)' : ''}${l.user_id === groep.created_by ? ' · maker' : ''}</span>
+                    ${eigenaar && l.user_id !== me.id ? `<button class="klein-knop" data-uid="${esc(l.user_id)}">Verwijderen</button>` : ''}</div>`).join('')}
+                ${nietLeden.length ? `<h3>Lid toevoegen</h3><form id="hl"><select name="uid">${nietLeden.map(u => `<option value="${esc(u.id)}">${esc(u.username)}</option>`).join('')}</select> <button>Toevoegen</button></form>` : ''}
+                <p class="gevaar"><a href="#" id="uit-groep">${eigenaar ? 'Groep verwijderen' : 'Groep verlaten'}</a></p>
+            </div>`;
         $('hf').onsubmit = async e => {
             e.preventDefault();
             try {
@@ -460,23 +450,39 @@ async function chat(arg) {
                 if (error) throw error;
                 groep.avatar = pad;
                 herlaadGroepen();
-                toonBeheer();
+                toonInfo();
             } catch (err) { $('foutf').textContent = err.message; }
+        };
+        if ($('hn')) $('hn').onsubmit = async e => {
+            e.preventDefault();
+            const naam = e.target.naam.value.trim();
+            if (naam) {
+                const { error } = await sb.from('groups').update({ name: naam }).eq('id', groepId);
+                if (error) { toast(error.message); return; }
+                groep.name = naam;
+            }
+            herlaadGroepen();
+            toonInfo();
         };
         document.querySelectorAll('.klein-knop').forEach(b => b.onclick = async () => {
             await sb.from('group_members').delete().eq('group_id', groepId).eq('user_id', b.dataset.uid);
-            toonBeheer();
+            toonInfo();
         });
         if ($('hl')) $('hl').onsubmit = async e => {
             e.preventDefault();
             const { error } = await sb.from('group_members').insert({ group_id: groepId, user_id: e.target.uid.value });
             if (error) toast(error.message);
-            toonBeheer();
+            toonInfo();
         };
-        $('hv').onclick = async e => {
+        $('uit-groep').onclick = async e => {
             e.preventDefault();
-            if (!confirm('Dit verwijdert de groep en alle berichten voor iedereen. Weet je het zeker?')) return;
-            await sb.from('groups').delete().eq('id', groepId);
+            if (eigenaar) {
+                if (!confirm('Dit verwijdert de groep en alle berichten voor iedereen. Weet je het zeker?')) return;
+                await sb.from('groups').delete().eq('id', groepId);
+            } else {
+                if (!confirm('Wil je deze groep verlaten?')) return;
+                await sb.from('group_members').delete().eq('group_id', groepId).eq('user_id', me.id);
+            }
             location.hash = '#/chat';
         };
     }
@@ -535,7 +541,7 @@ async function chat(arg) {
     // ----- Welk scherm rechts? -----
     if (nieuweGroep) toonNieuweGroep();
     else if (gm && !groep) $('venster').innerHTML = `<div class="chat-header"><a class="terug" href="#/chat">←</a><strong>Groep</strong></div><div class="chat-leeg">Deze groep bestaat niet (meer).</div>`;
-    else if (groep && beheer && groep.created_by === me.id) toonBeheer();
+    else if (groep && info) toonInfo();
     else if (groep) toonGroep();
     else if (andere) toonPrive();
     else $('venster').innerHTML = `<div class="chat-leeg">Kies een chat om te beginnen</div>`;
