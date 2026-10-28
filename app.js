@@ -483,6 +483,7 @@ async function chat(arg) {
     function toonNieuweGroep() {
         $('venster').innerHTML = `<div class="chat-header"><a class="terug" href="#/chat">←</a><strong>Nieuwe groep</strong></div>
             <form id="gf" class="beheer"><label>Groepsnaam</label><br><input name="naam" maxlength="40" required><br><br>
+            <label>Groepsfoto (optioneel)</label><br><input type="file" name="file" accept="image/*"><br><br>
             <label>Leden</label><div class="ledenlijst">${users.map(u => `<label class="lid"><input type="checkbox" value="${esc(u.id)}"> ${avatar(u, 24)} ${esc(u.username)}</label>`).join('')}</div>
             <button>Groep aanmaken</button> <span class="fout" id="fout"></span></form>`;
         $('gf').onsubmit = async e => {
@@ -490,7 +491,13 @@ async function chat(arg) {
             const naam = e.target.naam.value.trim();
             const ids = [...e.target.querySelectorAll('input[type=checkbox]:checked')].map(c => c.value);
             if (!naam || ids.length === 0) { $('fout').textContent = 'Geef een naam en kies minstens één lid.'; return; }
-            const { data: g, error } = await sb.from('groups').insert({ name: naam, created_by: me.id }).select().single();
+            let foto = null;
+            const bestand = e.target.file.files[0];
+            if (bestand) {
+                try { checkFile(bestand); foto = await upload('avatars', bestand, me.id); }
+                catch (err) { $('fout').textContent = err.message; return; }
+            }
+            const { data: g, error } = await sb.from('groups').insert({ name: naam, created_by: me.id, avatar: foto }).select().single();
             if (error) { $('fout').textContent = error.message; return; }
             const { error: e2 } = await sb.from('group_members').insert([me.id, ...ids].map(uid => ({ group_id: g.id, user_id: uid })));
             if (e2) { $('fout').textContent = e2.message; return; }
