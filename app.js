@@ -640,76 +640,158 @@ async function laadScores(spel) {
 }
 
 function snake() {
-    $('speelveld').innerHTML = `<p id="score">Score: 0</p><canvas class="snake" width="300" height="300"></canvas>
-        <div class="pijlen"><button data-d="0,-1">↑</button><button data-d="-1,0">←</button><button data-d="0,1">↓</button><button data-d="1,0">→</button></div>`;
-    const ctx = document.querySelector('canvas.snake').getContext('2d');
-    const N = 15, S = 20;
-    let slang, richting, volgende, appel, score, timer;
+    const COLS = 17, ROWS = 15, S = 30, TICK = 130, DPR = 2;
+    $('speelveld').innerHTML = `<div class="snake-wrap">
+        <div class="snake-balk"><span class="appel-icoon"></span><b id="sn-score">0</b><span class="beker">Beste</span><b id="sn-best">0</b></div>
+        <canvas class="snake" width="${COLS * S * DPR}" height="${ROWS * S * DPR}"></canvas></div>
+        <div class="pijlen"><button data-d="0,-1">↑</button><button data-d="-1,0">←</button><button data-d="0,1">↓</button><button data-d="1,0">→</button></div>
+        <p class="intro">Pijltjestoetsen of WASD. Op je telefoon veeg je over het veld.</p>`;
+    const cv = document.querySelector('canvas.snake'), ctx = cv.getContext('2d');
+    ctx.scale(DPR, DPR);
+    let slang, vorige, richting, wachtrij, appel, score, best = 0, stand, acc = 0, laatste = performance.now(), raf, pop = 0;
 
-    function nieuw() {
-        slang = [{ x: 7, y: 7 }];
-        richting = volgende = { x: 1, y: 0 };
-        score = 0;
-        $('score').textContent = 'Score: 0';
-        zetAppel();
-        teken();
-        clearInterval(timer);
-        timer = setInterval(stap, 120);
-    }
     function zetAppel() {
-        do { appel = { x: Math.floor(Math.random() * N), y: Math.floor(Math.random() * N) }; }
+        do { appel = { x: Math.floor(Math.random() * COLS), y: Math.floor(Math.random() * ROWS) }; }
         while (slang.some(s => s.x === appel.x && s.y === appel.y));
     }
-    function stap() {
-        richting = volgende;
-        const kop = { x: slang[0].x + richting.x, y: slang[0].y + richting.y };
-        if (kop.x < 0 || kop.y < 0 || kop.x >= N || kop.y >= N || slang.some(s => s.x === kop.x && s.y === kop.y)) return einde();
-        slang.unshift(kop);
-        if (kop.x === appel.x && kop.y === appel.y) { score++; $('score').textContent = 'Score: ' + score; zetAppel(); }
-        else slang.pop();
-        teken();
+    function nieuw() {
+        slang = [{ x: 4, y: 7 }, { x: 3, y: 7 }, { x: 2, y: 7 }];
+        vorige = slang.map(s => ({ ...s }));
+        richting = { x: 1, y: 0 };
+        wachtrij = [];
+        score = 0;
+        stand = 'wacht';
+        acc = 0;
+        $('sn-score').textContent = '0';
+        zetAppel();
     }
-    function teken() {
-        ctx.fillStyle = '#10241d';
-        ctx.fillRect(0, 0, 300, 300);
-        ctx.fillStyle = '#e0543c';
-        ctx.fillRect(appel.x * S, appel.y * S, S - 2, S - 2);
-        ctx.fillStyle = '#4fd1a1';
-        slang.forEach(s => ctx.fillRect(s.x * S, s.y * S, S - 2, S - 2));
-    }
-    async function einde() {
-        clearInterval(timer);
-        $('score').innerHTML = `Game over! Score: ${score} <button id="opnieuw">Opnieuw</button>`;
-        $('opnieuw').onclick = nieuw;
+    async function dood() {
+        stand = 'dood';
+        if (score > best) { best = score; $('sn-best').textContent = best; }
         await bewaarScore('snake', score);
     }
-    function stuur(dx, dy) {
-        if (dx === -richting.x && dy === -richting.y && slang.length > 1) return;   // niet achteruit
-        volgende = { x: dx, y: dy };
+    function stap() {
+        if (wachtrij.length) {
+            const r = wachtrij.shift();
+            if (!(r.x === -richting.x && r.y === -richting.y)) richting = r;
+        }
+        const kop = { x: slang[0].x + richting.x, y: slang[0].y + richting.y };
+        const eet = kop.x === appel.x && kop.y === appel.y;
+        const lichaam = eet ? slang : slang.slice(0, -1);        // de staart schuift weg, tenzij we groeien
+        if (kop.x < 0 || kop.y < 0 || kop.x >= COLS || kop.y >= ROWS || lichaam.some(s => s.x === kop.x && s.y === kop.y)) return dood();
+        vorige = slang.map(s => ({ ...s }));
+        slang.unshift(kop);
+        if (eet) { score++; pop = 1; $('sn-score').textContent = score; zetAppel(); }
+        else slang.pop();
     }
+    function richt(dx, dy) {
+        if (stand === 'dood') return;
+        if (stand === 'wacht') { stand = 'speel'; acc = 0; }
+        const l = wachtrij.length ? wachtrij[wachtrij.length - 1] : richting;
+        if ((dx === l.x && dy === l.y) || (dx === -l.x && dy === -l.y)) return;
+        if (wachtrij.length < 2) wachtrij.push({ x: dx, y: dy });
+    }
+
+    function tekst(regels) {
+        ctx.fillStyle = 'rgba(0,0,0,.45)';
+        ctx.fillRect(0, 0, COLS * S, ROWS * S);
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'center';
+        regels.forEach(([t, grootte, y]) => { ctx.font = `800 ${grootte}px "Nunito Sans", sans-serif`; ctx.fillText(t, COLS * S / 2, y); });
+    }
+    function teken(t) {
+        for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+            ctx.fillStyle = (r + c) % 2 ? '#a2d149' : '#aad751';
+            ctx.fillRect(c * S, r * S, S, S);
+        }
+        // appel
+        const ax = (appel.x + .5) * S, ay = (appel.y + .5) * S, ra = S * 0.38 * (1 + Math.sin(performance.now() / 300) * 0.04);
+        ctx.fillStyle = '#e7471d';
+        ctx.beginPath(); ctx.arc(ax, ay + 1, ra, 0, 7); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,.4)';
+        ctx.beginPath(); ctx.arc(ax - ra * .35, ay - ra * .25, ra * .25, 0, 7); ctx.fill();
+        ctx.fillStyle = '#3f8a2a';
+        ctx.beginPath(); ctx.ellipse(ax + 3, ay - ra - 1, 5, 2.5, -0.5, 0, 7); ctx.fill();
+        // slang: de lichaamsdelen glijden vloeiend naar hun volgende plek
+        const pts = slang.map((s, i) => {
+            const v = vorige[i] || vorige[vorige.length - 1];
+            return { x: (v.x + (s.x - v.x) * t + .5) * S, y: (v.y + (s.y - v.y) * t + .5) * S };
+        });
+        ctx.lineCap = ctx.lineJoin = 'round';
+        ctx.strokeStyle = '#4a7cf5';
+        ctx.lineWidth = S * 0.74;
+        ctx.beginPath();
+        pts.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
+        ctx.stroke();
+        const h = pts[0], rk = S * 0.42 * (1 + pop * 0.18), dx = richting.x, dy = richting.y;
+        ctx.fillStyle = '#4a7cf5';
+        ctx.beginPath(); ctx.arc(h.x, h.y, rk, 0, 7); ctx.fill();
+        [-1, 1].forEach(z => {
+            const ex = h.x + dx * S * 0.12 - dy * z * S * 0.17, ey = h.y + dy * S * 0.12 + dx * z * S * 0.17;
+            ctx.fillStyle = '#fff';
+            ctx.beginPath(); ctx.arc(ex, ey, S * 0.13, 0, 7); ctx.fill();
+            ctx.fillStyle = '#111';
+            ctx.beginPath(); ctx.arc(ex + dx * S * 0.05, ey + dy * S * 0.05, S * 0.065, 0, 7); ctx.fill();
+        });
+        pop = Math.max(0, pop - 0.06);
+        if (stand === 'wacht') tekst([['Druk op een pijltje om te starten', 20, ROWS * S / 2 + 6]]);
+        if (stand === 'dood') tekst([['Game over', 34, ROWS * S / 2 - 14], [`Score: ${score}`, 20, ROWS * S / 2 + 16], ['Spatie of tik om opnieuw te spelen', 15, ROWS * S / 2 + 44]]);
+    }
+    function lus(nu) {
+        const dt = Math.min(nu - laatste, 100);
+        laatste = nu;
+        if (stand === 'speel') {
+            acc += dt;
+            while (acc >= TICK && stand === 'speel') { acc -= TICK; stap(); }
+        }
+        teken(stand === 'speel' ? acc / TICK : 1);
+        raf = requestAnimationFrame(lus);
+    }
+
+    const RICHTINGEN = { arrowup: [0, -1], w: [0, -1], arrowdown: [0, 1], s: [0, 1], arrowleft: [-1, 0], a: [-1, 0], arrowright: [1, 0], d: [1, 0] };
     const toets = e => {
-        const k = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] }[e.key];
-        if (!k) return;
-        e.preventDefault();
-        stuur(k[0], k[1]);
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        const k = e.key.toLowerCase();
+        if (RICHTINGEN[k]) { e.preventDefault(); richt(...RICHTINGEN[k]); }
+        else if ((k === ' ' || k === 'enter') && stand === 'dood') { e.preventDefault(); nieuw(); }
     };
+    let begin = null;
+    cv.addEventListener('touchstart', e => { begin = e.touches[0]; }, { passive: true });
+    cv.addEventListener('touchend', e => {
+        if (!begin) return;
+        const eind = e.changedTouches[0], dx = eind.clientX - begin.clientX, dy = eind.clientY - begin.clientY;
+        begin = null;
+        if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) { if (stand === 'dood') nieuw(); return; }
+        if (Math.abs(dx) > Math.abs(dy)) richt(dx > 0 ? 1 : -1, 0); else richt(0, dy > 0 ? 1 : -1);
+    });
+    cv.onclick = () => { if (stand === 'dood') nieuw(); };
     document.addEventListener('keydown', toets);
-    document.querySelectorAll('.pijlen button').forEach(b => b.onclick = () => stuur(...b.dataset.d.split(',').map(Number)));
-    cleanup.push(() => { clearInterval(timer); document.removeEventListener('keydown', toets); });
+    document.querySelectorAll('.pijlen button').forEach(b => b.onclick = () => richt(...b.dataset.d.split(',').map(Number)));
+    cleanup.push(() => { cancelAnimationFrame(raf); document.removeEventListener('keydown', toets); });
+
+    if (me) sb.from('highscores').select('score').eq('game', 'snake').eq('user_id', me.id).maybeSingle()
+        .then(({ data }) => { if (data && $('sn-best')) { best = data.score; $('sn-best').textContent = best; } });
     nieuw();
+    raf = requestAnimationFrame(lus);
 }
 
-// Woordspel: raad elke dag een nieuw woord van 5 letters in 6 pogingen (iedereen krijgt hetzelfde woord)
-const WOORDEN = 'aarde actie adres alarm album alles ander angst appel arend armen asiel baard balen banen basis beeld beest beide beker beleg bende beter beurt bezem bezig bloem bloed blond boden boete bonen boten braaf brand breed brief brood bruin buien buurt chaos clown daken dagen dames datum deken delen diner dieet dwaas draad droom drank druif dwerg eerst eigen eiken emmer enkel fiets flink fluit fruit gaten gebak geluk gerst gezin glans graag graan grens grond groen groot grote haast haken halen halve hamer harde hazen heide helft hemel hoofd hoeve hoger hotel huilt huren idiot jacht jager jaren jonge juist kaart kaars kamer kapot katje keten keuze kerel kerst kleur klein kleed klomp knoop koken komen kopen kopje korte kraan krant kring kroon kruid kunst laars leden leger lente leren lepel leuke licht lopen lucht lunch maken maand macht maart merel meter mogen modem molen motor muren nacht naald naast namen negen niets nodig noten oever onder oogst opera orgel paard paars patat peper pizza plaat plank plant plein poort proef pruim raden raken ramen regen rente saaie salon schip sfeer sinds sjaal slaap slang sluit smaak snoep soort sport staal stoel stoom storm straf strak strik taart tafel tegel tekst thuis toren trein trots uilen vader varen veren vezel visie vogel vraag vrede vrouw vuist vuren waard wagen water weten winst woord wraak zaken zalig zeker zeven zomer zonde zwaar zwart zweet'.split(' ');
+// Woordspel: raad een woord van 5 letters in 6 pogingen. Daarna kun je meteen een nieuw woord spelen, zo vaak je wilt.
+const WOORDEN = 'aarde actie adres alarm album alles ander angst appel arend armen asiel baard balen banen basis beeld beest beide beker beleg bende beter beurt bezem bezig bloem bloed blond boden boete bonen boten braaf brand breed brief brood bruin buien buurt chaos clown daken dagen dames datum deken delen diner dieet dwaas draad droom drank druif dwerg eerst eigen eiken emmer enkel fiets flink fluit fruit gaten gebak geluk gerst gezin glans graag graan grens grond groen groot grote haast haken halen halve hamer harde hazen heide helft hemel hoofd hoeve hoger hotel huilt huren idiot jacht jager jaren jonge juist kaart kaars kamer kapot katje keten keuze kerel kerst kleur klein kleed klomp knoop koken komen kopen kopje korte kraan krant kring kroon kruid kunst laars leden leger lente leren lepel leuke licht lopen lucht lunch maken maand macht maart merel meter mogen modem molen motor muren nacht naald naast namen negen niets nodig noten oever onder oogst opera orgel paard paars patat peper pizza plaat plank plant plein poort proef pruim raden raken ramen regen rente saaie salon schip sfeer sinds sjaal slaap slang sluit smaak snoep soort sport staal stoel stoom storm straf strak strik taart tafel tegel tekst thuis toren trein trots uilen vader varen veren vezel visie vogel vraag vrede vrouw vuist vuren waard wagen water weten winst woord wraak zaken zalig zeker zeven zomer zonde zwaar zwart zweet aders afval agent akker alsof anker anjer apart april asbak avond baken banjo beden begin beste beton bezit blank blauw blind blits blote bocht bodem boord borst bosje boter bouwt boven braam brein breuk broek bruid buigt cacao cavia cello chips circa cobra dadel dalen demon dicht dikte dorst draak drama droog duwen dikke eisen eland enorm extra fabel falen feest ficus flauw flits foute front fobie forel fleur gamen garen geest gelei genre geval goede gooit graad grill groei gunst haren harig heden heeft heren hobby hoeft hoort horde humor hecht hoest idool ieder imago inzet items jeans jubel kader kanon kapel karaf karma kazen kegel kever klant klaar klauw kleef klerk klets klont kluis knaap knoei knots koers koest kogel kolom komst koord koper kraag kraam krans kreet kroeg kruis kruik kudde kusje kwart kwast kweek laden lager lanen latex leeft leeuw leven lever liter loket loods loont magie magma maker mamma manen manie mango markt media menen metro model mooie motto musea nagel nicht nieuw noord oasis offer omdat oraal ouder ovaal pakje panda pasta pauze peren piste plaag plato plots pluim poker polis poten praat prima print prins puree raket rapen recht reden reeds retro riant riool robot rotte route ruilt ruzie sauna schat schep schok serie shirt skate slaaf slaat sleur slood sloot smeer snack snaar spaak speel speen spoor sprak spuit staat stage stand steen stelt steun stoep stond stout strip stuur super swing taken talen tarwe taxis tegen teken tempo thema titel tonen toost tosti toets trage twist uitje uiten vaart vacht valse vanaf verse vette vleug vlieg vloer vlees voren vorig vorst vroeg vulde waait waren warme weken wezen wilde woede wonen woont worst wrede yacht zacht zagen zalen zegel zelfs zicht zodat zorgt zucht zusje zwaan zweer zwoel'.split(' ');
+let laatsteWoord = '';
 
 function wordle() {
-    const dag = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Amsterdam' });
-    const woord = WOORDEN[(Math.floor(Date.parse(dag) / 86400000) * 7919) % WOORDEN.length];
-    const opslag = 'woordspel:' + dag;
-    let gokken = [], huidig = '';
-    try { gokken = JSON.parse(localStorage.getItem(opslag)) || []; } catch (e) { gokken = []; }
-    $('speelveld').innerHTML = `<p id="score"></p><div class="wordle" id="bord"></div><div class="toetsen" id="toetsen"></div>`;
+    let woord = '', gokken = [], huidig = '';
+    let stats = { gespeeld: 0, gewonnen: 0, reeks: 0 };
+    try { stats = Object.assign(stats, JSON.parse(localStorage.getItem('woordspel:stats'))); } catch (e) { /* niet erg */ }
+    $('speelveld').innerHTML = `<p id="score"></p><p id="wstats" class="intro"></p><div class="wordle" id="bord"></div><div class="toetsen" id="toetsen"></div>`;
 
+    function nieuwSpel() {
+        do { woord = WOORDEN[Math.floor(Math.random() * WOORDEN.length)]; } while (woord === laatsteWoord);
+        laatsteWoord = woord;
+        gokken = [];
+        huidig = '';
+        teken();
+    }
     function beoordeel(gok) {
         const uitslag = Array(5).fill('fout'), over = {};
         for (let i = 0; i < 5; i++) {
@@ -745,17 +827,24 @@ function wordle() {
         const knop = k => `<button data-k="${k}" class="${letters[k] || ''}">${k === 'backspace' ? 'Wis' : k}</button>`;
         $('toetsen').innerHTML = ['qwertyuiop', 'asdfghjkl'].map(rij => `<div>${[...rij].map(knop).join('')}</div>`).join('')
             + `<div>${knop('enter')}${[...'zxcvbnm'].map(knop).join('')}${knop('backspace')}</div>`;
-        $('score').textContent = gewonnen() ? `Goed gedaan! Je had het in ${gokken.length} ${gokken.length === 1 ? 'poging' : 'pogingen'}. Morgen komt er een nieuw woord.`
-            : klaar() ? `Helaas, het woord was ${woord.toUpperCase()}. Morgen komt er een nieuw woord.`
-            : 'Raad het woord van vandaag. Je hebt 6 pogingen.';
+        const nieuwKnop = ' <button id="nieuw">Nieuw woord</button>';
+        $('score').innerHTML = gewonnen() ? `Goed gedaan! Je had het in ${gokken.length} ${gokken.length === 1 ? 'poging' : 'pogingen'}.` + nieuwKnop
+            : klaar() ? `Helaas, het woord was ${woord.toUpperCase()}.` + nieuwKnop
+            : 'Raad het woord. Je hebt 6 pogingen.';
+        if ($('nieuw')) $('nieuw').onclick = nieuwSpel;
+        $('wstats').textContent = `Gespeeld: ${stats.gespeeld} · Gewonnen: ${stats.gewonnen} · Reeks: ${stats.reeks}`;
     }
     function toets(k) {
-        if (klaar()) return;
+        if (klaar()) { if (k === 'enter') nieuwSpel(); return; }
         if (k === 'enter') {
             if (huidig.length < 5) { toast('Vul 5 letters in.'); return; }
             gokken.push(huidig);
             huidig = '';
-            try { localStorage.setItem(opslag, JSON.stringify(gokken)); } catch (e) { /* niet erg */ }
+            if (klaar()) {
+                stats.gespeeld++;
+                if (gewonnen()) { stats.gewonnen++; stats.reeks++; } else stats.reeks = 0;
+                try { localStorage.setItem('woordspel:stats', JSON.stringify(stats)); } catch (e) { /* niet erg */ }
+            }
         } else if (k === 'backspace') huidig = huidig.slice(0, -1);
         else if (/^[a-z]$/.test(k) && huidig.length < 5) huidig += k;
         teken();
@@ -768,7 +857,7 @@ function wordle() {
     };
     document.addEventListener('keydown', keydown);
     cleanup.push(() => document.removeEventListener('keydown', keydown));
-    teken();
+    nieuwSpel();
 }
 
 // ---------- Start ----------
