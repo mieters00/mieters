@@ -173,3 +173,11 @@ canvas.snake { width: min(300px, 100%); border-radius: var(--r); display: block;
 .toetsen { display: flex; flex-direction: column; gap: 6px; align-items: center; max-width: 100%; }
 .toetsen div { display: flex; gap: 4px; }
 .toetsen button { min-width: 30px; height: 44px; padding: 0 8px; background: var(--kaart); color: var(--tekst); border: 1px solid var(--lijn); text-transform: uppercase; font-weight: 600; }
+
+/* Snake in Google-stijl */
+.snake-wrap { max-width: 510px; }
+.snake-balk { display: flex; align-items: center; gap: 8px; background: #4a752c; color: #fff; padding: 8px 14px; border-radius: var(--r) var(--r) 0 0; font-size: 18px; }
+.snake-balk .beker { margin-left: auto; font-size: 13px; opacity: .85; }
+.appel-icoon { width: 18px; height: 18px; border-radius: 50%; background: #e7471d; display: inline-block; }
+canvas.snake { width: 100%; max-width: 510px; display: block; border-radius: 0 0 var(--r) var(--r); touch-action: none; cursor: pointer; }
+@media (hover: hover) { .pijlen { display: none; } }
