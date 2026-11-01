@@ -686,10 +686,13 @@ function snake() {
     }
     function richt(dx, dy) {
         if (stand === 'dood') return;
-        if (stand === 'wacht') { stand = 'speel'; acc = 0; }
+        const startje = stand === 'wacht';
+        if (startje) { stand = 'speel'; acc = 0; }
         const l = wachtrij.length ? wachtrij[wachtrij.length - 1] : richting;
         if ((dx === l.x && dy === l.y) || (dx === -l.x && dy === -l.y)) return;
         if (wachtrij.length < 2) wachtrij.push({ x: dx, y: dy });
+        // Draai meteen, in plaats van te wachten op de volgende tik
+        if (wachtrij.length === 1 && (startje || acc > TICK * 0.3)) { acc = 0; stap(); }
     }
 
     function tekst(regels) {
@@ -755,14 +758,23 @@ function snake() {
         if (RICHTINGEN[k]) { e.preventDefault(); richt(...RICHTINGEN[k]); }
         else if ((k === ' ' || k === 'enter') && stand === 'dood') { e.preventDefault(); nieuw(); }
     };
-    let begin = null;
-    cv.addEventListener('touchstart', e => { begin = e.touches[0]; }, { passive: true });
-    cv.addEventListener('touchend', e => {
+    // Swipen werkt direct tijdens de beweging, niet pas als je je vinger loslaat
+    let begin = null, geveegd = false;
+    cv.addEventListener('touchstart', e => {
+        begin = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        geveegd = false;
+    }, { passive: true });
+    cv.addEventListener('touchmove', e => {
         if (!begin) return;
-        const eind = e.changedTouches[0], dx = eind.clientX - begin.clientX, dy = eind.clientY - begin.clientY;
-        begin = null;
-        if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) { if (stand === 'dood') nieuw(); return; }
+        const p = e.touches[0], dx = p.clientX - begin.x, dy = p.clientY - begin.y;
+        if (Math.max(Math.abs(dx), Math.abs(dy)) < 12) return;
         if (Math.abs(dx) > Math.abs(dy)) richt(dx > 0 ? 1 : -1, 0); else richt(0, dy > 0 ? 1 : -1);
+        begin = { x: p.clientX, y: p.clientY };       // klaar voor de volgende bocht in dezelfde veeg
+        geveegd = true;
+    }, { passive: true });
+    cv.addEventListener('touchend', () => {
+        if (!geveegd && stand === 'dood') nieuw();
+        begin = null;
     });
     cv.onclick = () => { if (stand === 'dood') nieuw(); };
     document.addEventListener('keydown', toets);
