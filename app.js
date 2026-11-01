@@ -5,6 +5,8 @@ let me = null;       // ingelogde gebruiker: { id, username, avatar }
 let cleanup = [];    // functies die bij het verlaten van een pagina worden uitgevoerd
 
 // ---------- Hulpfuncties ----------
+// Voert een functie pas uit als het even stil is: veel realtime-meldingen vlak na elkaar worden één keer verwerkt
+const debounce = (f, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => f(...a), ms); }; };
 const esc = t => String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const pub = (bucket, path) => sb.storage.from(bucket).getPublicUrl(path).data.publicUrl;
 const email = naam => naam.toLowerCase() + '@mieters.app';   // Supabase wil een e-mailadres; we maken er een van je gebruikersnaam
@@ -12,19 +14,39 @@ const email = naam => naam.toLowerCase() + '@mieters.app';   // Supabase wil een
 function avatar(p, size = 30) {
     const stijl = `width:${size}px;height:${size}px`;
     return p && p.avatar
-        ? `<img class="av" style="${stijl}" src="${esc(pub('avatars', p.avatar))}">`
+        ? `<img class="av" loading="lazy" decoding="async" style="${stijl}" src="${esc(pub('avatars', p.avatar))}">`
         : `<div class="av av-leeg" style="${stijl}">${esc(((p && p.username) || '?')[0].toUpperCase())}</div>`;
 }
 
 const TYPES = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp' };
-function checkFile(file) {
-    if (!file || !TYPES[file.type] || file.size > 5 * 1024 * 1024)
-        throw new Error('Kies een jpg, png, gif of webp van maximaal 5 MB.');
+// ruw = het bestand wordt nog verkleind, dus een grotere foto is dan prima (een GIF blijft maximaal 5 MB)
+function checkFile(file, ruw = false) {
+    const max = ruw && file && file.type !== 'image/gif' ? 25 : 5;
+    if (!file || !TYPES[file.type] || file.size > max * 1024 * 1024)
+        throw new Error('Kies een jpg, png, gif of webp. Een GIF mag maximaal 5 MB zijn.');
+}
+// Verkleint grote foto's tot maximaal 1600 px. Dat scheelt laadtijd, en de verborgen gegevens in een foto (zoals de GPS-locatie) verdwijnen.
+async function verkleind(file) {
+    if (file.type === 'image/gif' || file.size < 400 * 1024) return file;
+    try {
+        const bmp = await createImageBitmap(file);
+        const f = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+        const cv = document.createElement('canvas');
+        cv.width = Math.round(bmp.width * f);
+        cv.height = Math.round(bmp.height * f);
+        cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height);
+        bmp.close();
+        const blob = await new Promise(r => cv.toBlob(r, 'image/webp', 0.85));
+        return blob && TYPES[blob.type] && blob.size < file.size ? new File([blob], 'foto', { type: blob.type }) : file;
+    } catch (e) { return file; }
 }
 async function upload(bucket, file, uid) {
+    checkFile(file, true);
+    file = await verkleind(file);
     checkFile(file);
     const pad = `${uid}/${crypto.randomUUID()}.${TYPES[file.type]}`;
-    const { error } = await sb.storage.from(bucket).upload(pad, file);
+    // De bestandsnaam is willekeurig en verandert nooit, dus de browser mag hem lang onthouden
+    const { error } = await sb.storage.from(bucket).upload(pad, file, { cacheControl: '31536000', contentType: file.type });
     if (error) throw error;
     return pad;
 }
@@ -33,7 +55,7 @@ async function laadMij() {
     const { data: { session } } = await sb.auth.getSession();
     me = null;
     if (session) {
-        const { data } = await sb.from('profiles').select('*').eq('id', session.user.id).single();
+        const { data } = await sb.from('profiles').select('id,username,avatar').eq('id', session.user.id).single();
         me = data;
     }
 }
@@ -50,22 +72,18 @@ function toast(tekst) {
 let ongelezenTotaal = 0, meldingenKanaal = null;
 async function laadMeldingen() {
     if (!me) return;
-    const [{ count }, { data: gmsg }, { data: lezen }] = await Promise.all([
-        sb.from('messages').select('id', { count: 'exact', head: true }).eq('recipient', me.id).eq('read', false).eq('hidden_by_recipient', false),
-        sb.from('group_messages').select('group_id,created_at').neq('sender', me.id).order('created_at', { ascending: false }).limit(500),
-        sb.from('group_reads').select('group_id,last_read'),
-    ]);
-    const gelezen = Object.fromEntries((lezen || []).map(r => [r.group_id, r.last_read]));
-    const inGroepen = (gmsg || []).filter(m => !gelezen[m.group_id] || m.created_at > gelezen[m.group_id]).length;
-    ongelezenTotaal = (count || 0) + inGroepen;
+    // De database telt zelf (zie beveiliging.sql): één klein antwoord in plaats van 500 berichten ophalen
+    const { data } = await sb.rpc('ongelezen_totaal');
+    ongelezenTotaal = Number(data) || 0;
     document.title = (ongelezenTotaal ? `(${ongelezenTotaal}) ` : '') + 'Mieters';
     renderMenu();
 }
+const laadMeldingenSnel = debounce(() => laadMeldingen(), 400);
 function startMeldingen() {
     if (meldingenKanaal) return;
     meldingenKanaal = sb.channel('meldingen')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, laadMeldingen)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'group_messages' }, laadMeldingen)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, laadMeldingenSnel)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'group_messages' }, laadMeldingenSnel)
         .subscribe();
 }
 function stopMeldingen() {
@@ -91,7 +109,9 @@ async function route() {
     renderMenu();
     if (me) { startMeldingen(); laadMeldingen(); } else stopMeldingen();
     const paginas = { login, register, photos, profile, chat, bot, games };
-    await (paginas[naam] || home)(decodeURIComponent(arg || ''));
+    let a = arg || '';
+    try { a = decodeURIComponent(a); } catch (e) { a = ''; }     // een kapotte link (bijv. %zz) mag de site niet laten crashen
+    await (paginas[naam] || home)(a);
 }
 
 // ---------- Pagina's ----------
@@ -107,7 +127,7 @@ async function home() {
     const { data } = await sb.from('photos').select('path,description,profiles(username,avatar)').order('created_at', { ascending: false }).limit(8);
     if (!$('nieuw')) return;
     $('nieuw').innerHTML = (data || []).map(r => `
-        <div class="foto-item"><img src="${esc(pub('photos', r.path))}">
+        <div class="foto-item"><img loading="lazy" decoding="async" src="${esc(pub('photos', r.path))}">
         <div class="rij">${avatar(r.profiles)}<p>${esc(r.profiles && r.profiles.username)}</p></div>
         ${r.description ? `<p class="beschr">${esc(r.description)}</p>` : ''}</div>`).join('') || '<p class="leeg">Nog geen foto\'s.</p>';
     $('nieuw').onclick = e => { if (e.target.tagName === 'IMG' && !e.target.classList.contains('av')) location.hash = '#/photos'; };
@@ -147,7 +167,7 @@ function register() {
     app.innerHTML = `<div class="auth-kaart"><h2>Account aanmaken</h2><p class="fout" id="fout"></p>
         <form id="f"><label>Gebruikersnaam</label><br>
         <input name="u" required pattern="[A-Za-z0-9_]{3,20}" title="3 tot 20 letters, cijfers of _"><br><br>
-        <label>Wachtwoord</label><br><input name="p" type="password" minlength="6" required><br><br>
+        <label>Wachtwoord</label><br><input name="p" type="password" minlength="8" required><br><br>
         <label>Profielfoto</label><br><input name="file" type="file" accept="image/*" required><br><br>
         <button>Registreren</button></form>
         <p>Al een account? <a href="#/login">Inloggen</a></p></div>`;
@@ -155,7 +175,7 @@ function register() {
         e.preventDefault();
         const f = e.target, naam = f.u.value.trim();
         try {
-            checkFile(f.file.files[0]);   // eerst controleren, zodat er geen half account ontstaat
+            checkFile(f.file.files[0], true);   // eerst controleren, zodat er geen half account ontstaat
             const { data, error } = await sb.auth.signUp({ email: email(naam), password: f.p.value });
             if (error) throw new Error(/registered/i.test(error.message) ? 'Deze gebruikersnaam is al bezet.' : error.message);
             if (!data.session) throw new Error('Zet "Confirm email" uit in Supabase (zie SETUP.md).');
@@ -174,13 +194,16 @@ async function photos() {
            <input name="desc" placeholder="Voeg een beschrijving toe..." maxlength="300"><br><br>
            <button>Uploaden</button> <span class="fout" id="fout"></span></form>`
         : `<p><a href="#/login">Inloggen</a> om foto's te uploaden.</p>`) +
-        `<div id="fotos" class="fotos"></div><div id="overlay" hidden><img></div>`;
+        `<div id="fotos" class="fotos"></div><p class="meer"><button id="meer-fotos" hidden>Meer foto's laden</button></p><div id="overlay" hidden><img></div>`;
 
+    let aantal = 24;     // eerst 24 foto's, de rest op verzoek
     async function laad() {
-        const { data } = await sb.from('photos').select('id,path,description,profiles(username,avatar)').order('created_at', { ascending: false });
-        $('fotos').innerHTML = (data || []).map(r => `
+        const { data } = await sb.from('photos').select('id,path,description,profiles(username,avatar)').order('created_at', { ascending: false }).limit(aantal + 1);
+        if (!$('fotos')) return;
+        $('meer-fotos').hidden = !(data && data.length > aantal);
+        $('fotos').innerHTML = (data || []).slice(0, aantal).map(r => `
             <div class="foto-item">
-                <img src="${esc(pub('photos', r.path))}">
+                <img loading="lazy" decoding="async" src="${esc(pub('photos', r.path))}">
                 <div class="rij">${avatar(r.profiles)}<p>${esc(r.profiles && r.profiles.username)}</p></div>
                 ${r.description ? `<p class="beschr">${esc(r.description).replace(/@([a-zA-Z0-9_]+)/g, '<strong class="mention">@$1</strong>')}</p>` : ''}
             </div>`).join('');
@@ -192,6 +215,7 @@ async function photos() {
         $('overlay').hidden = false;
     };
     $('overlay').onclick = () => { $('overlay').hidden = true; };
+    $('meer-fotos').onclick = () => { aantal += 24; laad(); };
 
     if (me) $('up').onsubmit = async e => {
         e.preventDefault();
@@ -206,7 +230,8 @@ async function photos() {
         } catch (err) { $('fout').textContent = err.message; }
     };
 
-    const kanaal = sb.channel('fotos').on('postgres_changes', { event: '*', schema: 'public', table: 'photos' }, laad).subscribe();
+    const laadSnel = debounce(laad, 300);
+    const kanaal = sb.channel('fotos').on('postgres_changes', { event: '*', schema: 'public', table: 'photos' }, laadSnel).subscribe();
     cleanup.push(() => sb.removeChannel(kanaal));
     laad();
 }
@@ -221,7 +246,7 @@ async function profile() {
         <button id="uit">Uitloggen</button></div>
         <h3>Mijn foto's</h3>
         <div class="fotos">${(fotos || []).map(r => `
-            <div class="foto-item klein"><img src="${esc(pub('photos', r.path))}">
+            <div class="foto-item klein"><img loading="lazy" decoding="async" src="${esc(pub('photos', r.path))}">
             <button class="x" data-id="${r.id}" data-pad="${esc(r.path)}">×</button>
             ${r.description ? `<p class="beschr">${esc(r.description)}</p>` : ''}</div>`).join('')}</div>
         <p class="gevaar"><a href="#" id="del">Account verwijderen</a></p>`;
@@ -352,8 +377,9 @@ async function chat(arg) {
     // ----- Privéchat (zoals eerst) -----
     async function laadBerichten() {
         if (!andere) return;
-        const { data } = await sb.from('messages').select('*')
-            .or(`and(sender.eq.${me.id},recipient.eq.${andere.id}),and(sender.eq.${andere.id},recipient.eq.${me.id})`).order('created_at');
+        const { data: nieuwste } = await sb.from('messages').select('id,sender,recipient,body,image,read,created_at,hidden_by_sender,hidden_by_recipient')
+            .or(`and(sender.eq.${me.id},recipient.eq.${andere.id}),and(sender.eq.${andere.id},recipient.eq.${me.id})`).order('created_at', { ascending: false }).limit(100);
+        const data = (nieuwste || []).reverse();      // alleen de laatste 100 berichten, op volgorde
         const zichtbaar = (data || []).filter(m => !(m.sender === me.id ? m.hidden_by_sender : m.hidden_by_recipient));
         const cache = await chatUrls(zichtbaar.filter(m => m.image).map(m => m.image));
         const fotoUrl = p => (cache[p] && cache[p].url) || '';
@@ -379,7 +405,8 @@ async function chat(arg) {
     // ----- Groepschat -----
     async function laadGroepBerichten() {
         if (!groep || info || !$('chat')) return;
-        const { data } = await sb.from('group_messages').select('id,sender,body,image,created_at,profiles(username,avatar)').eq('group_id', groepId).order('created_at');
+        const { data: nieuwste } = await sb.from('group_messages').select('id,sender,body,image,created_at,profiles(username,avatar)').eq('group_id', groepId).order('created_at', { ascending: false }).limit(100);
+        const data = (nieuwste || []).reverse();
         const cache = await chatUrls((data || []).filter(m => m.image).map(m => m.image));
         const fotoUrl = p => (cache[p] && cache[p].url) || '';
         $('chat').innerHTML = (data || []).map(m => {
@@ -550,9 +577,11 @@ async function chat(arg) {
     else if (andere) toonPrive();
     else $('venster').innerHTML = `<div class="chat-leeg">Kies een chat om te beginnen</div>`;
 
+    const bijPrive = debounce(() => { laadLijst(); laadBerichten(); }, 300);
+    const bijGroep = debounce(() => { laadLijst(); laadGroepBerichten(); }, 300);
     const kanaal = sb.channel('chats')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => { laadLijst(); laadBerichten(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'group_messages' }, () => { laadLijst(); laadGroepBerichten(); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, bijPrive)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'group_messages' }, bijGroep)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'group_members' }, herlaadGroepen)
         .subscribe();
     cleanup.push(() => sb.removeChannel(kanaal));
@@ -585,15 +614,18 @@ async function bot() {
     if (!data || data.length === 0) voegToe(false, 'Hallo! Ik ben de AI bot. Stel me een vraag!');
     else data.forEach(r => voegToe(r.role === 'user', r.content));
 
+    let bezig = false;
     $('bf2').onsubmit = async e => {
         e.preventDefault();
         const vraag = e.target.v.value.trim();
-        if (!vraag) return;
+        if (!vraag || bezig) return;
+        bezig = true;
         e.target.v.value = '';
         voegToe(true, vraag);
         const laden = voegToe(false, 'Bot is aan het typen...');
         const { data: res, error } = await sb.functions.invoke('bot', { body: { vraag } });
         laden.remove();
+        bezig = false;
         voegToe(false, error || !res ? 'Fout: de bot is niet bereikbaar.' : res.antwoord);
     };
     $('wis').onclick = async e => {
@@ -622,8 +654,8 @@ function games(spel) {
 // Bewaart je score alleen als het je beste is
 async function bewaarScore(spel, score) {
     if (!me) return;
-    const { data: oud } = await sb.from('highscores').select('score').eq('game', spel).eq('user_id', me.id).maybeSingle();
-    if (!oud || score > oud.score) await sb.from('highscores').upsert({ game: spel, user_id: me.id, score });
+    // De database controleert de score en bewaart alleen je beste (zie beveiliging.sql)
+    await sb.rpc('bewaar_score', { p_game: spel, p_score: score });
     laadScores(spel);
 }
 
