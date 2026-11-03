@@ -179,3 +179,25 @@ canvas.snake { width: min(300px, 100%); border-radius: var(--r); display: block;
 .appel-icoon { width: 18px; height: 18px; border-radius: 50%; background: #e7471d; display: inline-block; }
 canvas.snake { width: 100%; max-width: 510px; display: block; border-radius: 0 0 var(--r) var(--r); touch-action: none; cursor: pointer; }
 @media (hover: hover) { .pijlen { display: none; } }
+
+/* Schaken */
+.schaak { max-width: 520px; }
+.sch-spelers { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
+.sch-status { font-weight: 800; margin-bottom: 10px; }
+.sch-info { color: var(--zacht); font-size: 13px; margin-left: auto; padding: 0 8px; }
+.sch-knoppen { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 12px 0; }
+.sch-zetten { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--zacht); }
+.sch-promo { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+.sch-promo button { background: #b58863; font-size: 30px; line-height: 1; padding: 4px 10px; }
+.bord { display: grid; grid-template-columns: repeat(8, 1fr); width: 100%; aspect-ratio: 1; border-radius: var(--r); overflow: hidden; user-select: none; -webkit-user-select: none; }
+.vak { display: flex; align-items: center; justify-content: center; position: relative; font-size: clamp(26px, 8.2vw, 50px); line-height: 1; cursor: pointer; }
+.vak.licht { background: #ecdcb8; }
+.vak.donker { background: #b58863; }
+.vak.laatste { box-shadow: inset 0 0 0 100px rgba(255, 235, 59, .35); }
+.vak.sel { background: #f6e05e; }
+.vak.schaak { background: radial-gradient(#e8503a 25%, #b58863 80%); }
+.vak.doel.leeg::after { content: ''; position: absolute; width: 28%; height: 28%; border-radius: 50%; background: rgba(11, 122, 94, .6); }
+.vak.doel.bezet::after { content: ''; position: absolute; inset: 4px; border-radius: 50%; border: 4px solid rgba(11, 122, 94, .65); }
+.st.w { color: #fff; text-shadow: 0 0 2px #000, 0 0 3px #000, 0 0 3px #000; }
+.st.z { color: #1b1b1b; text-shadow: 0 0 1px rgba(255, 255, 255, .45); }
+@media (hover: none) { .vak { cursor: default; } }

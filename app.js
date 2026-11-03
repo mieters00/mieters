@@ -105,10 +105,10 @@ async function route() {
     cleanup.forEach(f => f());
     cleanup = [];
     const [naam, arg] = location.hash.replace(/^#\/?/, '').split('/');
-    if (['chat', 'profile', 'bot'].includes(naam) && !me) { location.hash = '#/login'; return; }
+    if (['chat', 'profile', 'bot', 'schaak'].includes(naam) && !me) { location.hash = '#/login'; return; }
     renderMenu();
     if (me) { startMeldingen(); laadMeldingen(); } else stopMeldingen();
-    const paginas = { login, register, photos, profile, chat, bot, games };
+    const paginas = { login, register, photos, profile, chat, bot, games, schaak: schaakPartij };
     let a = arg || '';
     try { a = decodeURIComponent(a); } catch (e) { a = ''; }     // een kapotte link (bijv. %zz) mag de site niet laten crashen
     await (paginas[naam] || home)(a);
@@ -640,6 +640,7 @@ async function bot() {
 const SPELLEN = {
     snake:  { naam: 'Snake' },
     wordle: { naam: 'Woordspel', geenScores: true },
+    schaken: { naam: 'Schaken', geenScores: true },
 };
 
 function games(spel) {
@@ -647,7 +648,7 @@ function games(spel) {
     app.innerHTML = `<h2>Spellen</h2>
         <div class="spel-tabs">${Object.entries(SPELLEN).map(([k, s]) => `<a href="#/games/${k}" class="${k === spel ? 'actief' : ''}">${s.naam}</a>`).join('')}</div>
         <div class="spel-wrap"><div id="speelveld"></div><div id="scores"></div></div>`;
-    ({ snake, wordle })[spel]();
+    ({ snake, wordle, schaken: schaakLobby })[spel]();
     laadScores(spel);
 }
 
