@@ -151,9 +151,12 @@ const GLYPH = { K: '♚', Q: '♛', R: '♜', B: '♝', N: '♞', P: '♟\uFE0E'
 const REDEN = { mat: 'schaakmat', pat: 'pat', '50': '50 zetten', materiaal: 'te weinig materiaal', herhaling: 'driemaal dezelfde stelling' };
 const uitslag = g => (g.result === 'remise' ? 'Remise' : g.result === (g.white === me.id ? 'wit' : 'zwart') ? 'Gewonnen' : 'Verloren') + (g.reden ? ' · ' + g.reden : '');
 
-async function schaakLobby() {
+function schaakLobby() { return spelLobby({ tabel: 'chess_games', sel: SCHAAK_SEL, hash: 'schaak', start: { fen: SCHAAK.START } }); }
+
+// C = { tabel, sel, hash, start } beschrijft het spel: schaken (chess_games) of dammen (draughts_games)
+async function spelLobby(C) {
     const el = $('speelveld');
-    if (!me) { el.innerHTML = '<p class="intro">Log in om te schaken. <a href="#/login">Inloggen</a></p>'; return; }
+    if (!me) { el.innerHTML = '<p class="intro">Log in om te spelen. <a href="#/login">Inloggen</a></p>'; return; }
     el.innerHTML = `<div class="schaak-lobby"><form id="uitdaag" class="blok"><h3>Daag iemand uit</h3>
         <select name="tegen" required><option value="">Kies een speler</option></select> <button>Uitdagen</button>
         <p class="fout" id="sch-fout"></p></form><div id="sch-lijst"></div></div>`;
@@ -166,17 +169,17 @@ async function schaakLobby() {
         const tegen = e.target.tegen.value;
         if (!tegen) return;
         const wit = Math.random() < 0.5;       // wie wit krijgt, wordt geloot
-        const { error } = await sb.from('chess_games').insert({ white: wit ? me.id : tegen, black: wit ? tegen : me.id, created_by: me.id, status: 'uitgenodigd', fen: SCHAAK.START, moves: [] });
+        const { error } = await sb.from(C.tabel).insert({ white: wit ? me.id : tegen, black: wit ? tegen : me.id, created_by: me.id, status: 'uitgenodigd', ...C.start, moves: [] });
         $('sch-fout').textContent = error ? 'Uitdagen lukte niet. Je kunt maximaal 10 uitnodigingen open hebben.' : '';
         if (!error) laad();
     };
     async function laad() {
         if (!$('sch-lijst')) return;
-        const { data } = await sb.from('chess_games').select(SCHAAK_SEL).order('updated_at', { ascending: false }).limit(40);
+        const { data } = await sb.from(C.tabel).select(C.sel).order('updated_at', { ascending: false }).limit(40);
         const lijst = data || [];
         const rij = (g, tekst, knoppen = '') => {
             const tegen = g.white === me.id ? g.z : g.w;
-            return `<div class="score-rij">${avatar(tegen, 22)}<a href="#/schaak/${g.id}"><strong>${esc(tegen && tegen.username)}</strong></a><span class="sch-info">${esc(tekst)}</span>${knoppen}</div>`;
+            return `<div class="score-rij">${avatar(tegen, 22)}<a href="#/${C.hash}/${g.id}"><strong>${esc(tegen && tegen.username)}</strong></a><span class="sch-info">${esc(tekst)}</span>${knoppen}</div>`;
         };
         const del = (g, t) => `<button class="klein-knop" data-del="${g.id}">${t}</button>`;
         const blok = (titel, rijen) => rijen.length ? `<div class="blok"><h3>${titel}</h3>${rijen.join('')}</div>` : '';
@@ -195,13 +198,13 @@ async function schaakLobby() {
         const b = e.target.closest('button');
         if (!b) return;
         if (b.dataset.acc) {
-            const { error } = await sb.from('chess_games').update({ status: 'bezig' }).eq('id', b.dataset.acc);
-            if (error) toast('Dat lukte niet.'); else location.hash = '#/schaak/' + b.dataset.acc;
+            const { error } = await sb.from(C.tabel).update({ status: 'bezig' }).eq('id', b.dataset.acc);
+            if (error) toast('Dat lukte niet.'); else location.hash = `#/${C.hash}/` + b.dataset.acc;
         }
-        if (b.dataset.del) { await sb.from('chess_games').delete().eq('id', b.dataset.del); laad(); }
+        if (b.dataset.del) { await sb.from(C.tabel).delete().eq('id', b.dataset.del); laad(); }
     };
     const snel = debounce(laad, 300);
-    const kanaal = sb.channel('schaak-lobby').on('postgres_changes', { event: '*', schema: 'public', table: 'chess_games' }, snel).subscribe();
+    const kanaal = sb.channel('lobby-' + C.tabel).on('postgres_changes', { event: '*', schema: 'public', table: C.tabel }, snel).subscribe();
     cleanup.push(() => sb.removeChannel(kanaal));
     laad();
 }
