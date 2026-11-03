@@ -101,7 +101,7 @@ async function damPartij(id) {
     const haal = () => sb.from('draughts_games').select(DAM_SEL).eq('id', id).maybeSingle();
     const { data } = BOT ? { data: botPartij(BOT) } : await haal();
     if (!data) { app.innerHTML = '<div class="schaak"><p class="intro">Deze partij bestaat niet (meer). <a href="#/games/dammen">Terug</a></p></div>'; return; }
-    let g = data, sel = -1, pad = [];
+    let g = data, sel = -1, pad = [], getoond = -1;      // getoond = aantal zetten dat al op het scherm stond
     const wit = () => g.white === me.id;
 
     let weg = false;
@@ -109,7 +109,12 @@ async function damPartij(id) {
     function botZet() {
         if (!BOT || weg || g.status !== 'bezig') return;
         if (DAM.replay(g.moves).s.turn === (wit() ? 'w' : 'z')) return;
-        setTimeout(() => { if (weg) return; const R = DAM.replay(g.moves), m = DAMBOT.kies(R.s, R.keys, +BOT[1]); if (m) zet(m, R); }, 80);
+        const n = g.moves.length, t0 = Date.now();
+        setTimeout(() => {
+            if (weg) return;
+            const R = DAM.replay(g.moves), m = DAMBOT.kies(R.s, R.keys, +BOT[1]);
+            setTimeout(() => { if (!weg && m && g.status === 'bezig' && g.moves.length === n) zet(m, R); }, Math.max(0, BOTWACHT[+BOT[1]] - (Date.now() - t0)));
+        }, 450);
     }
     async function wijzig(velden) {
         if (BOT) { g = { ...g, ...velden }; sel = -1; pad = []; render(); botZet(); return; }
@@ -165,6 +170,15 @@ async function damPartij(id) {
             <div class="sch-knoppen">${knoppen}</div>
             <div class="sch-zetten">${lijst || '<span class="sch-info">Nog geen zetten.</span>'}</div></div>`;
 
+        if (getoond >= 0 && g.moves.length > getoond && R.laatste) {      // er is een nieuwe zet: laat hem zien
+            const m = R.laatste, bord = $('dam-bord'), vorig = DAM.replay(g.moves.slice(0, -1)).s, eind = m.path[m.path.length - 1];
+            schuif(bord, bord.querySelector(`[data-i="${eind}"] .dsch`), m.from, m.path, 260);
+            m.over.forEach((o, k) => {      // geslagen stukken verdwijnen op het moment dat jouw stuk erlangs komt
+                const x = vorig.b[o];
+                spook(bord, o, `<span class="dsch ${x.toLowerCase()}${x === 'W' || x === 'Z' ? ' dam' : ''}"></span>`, 260 * k + 100);
+            });
+        }
+        getoond = g.moves.length;
         const klik = (id2, f) => { const el = $(id2); if (el) el.onclick = f; };
         klik('sch-acc', () => wijzig({ status: 'bezig' }));
         klik('sch-weiger', async () => { await sb.from('draughts_games').delete().eq('id', g.id); location.hash = '#/games/dammen'; });
