@@ -216,3 +216,10 @@ canvas.snake { width: 100%; max-width: 510px; display: block; border-radius: 0 0
 .dsch.w { background: radial-gradient(circle at 35% 30%, #fff, #d4cdbd); color: #b8860b; }
 .dsch.z { background: radial-gradient(circle at 35% 30%, #5c5c5c, #191919); color: #f0c040; }
 .dsch.dam::after { content: '\265B\FE0E'; }
+
+/* Animaties */
+.spook { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 4; }
+.vak.sel .st { transform: translateY(-2px) scale(1.1); }
+.vak.doel.doel-leeg::after { animation: pop .18s ease-out; }
+.dvak.doel::after { animation: pop .18s ease-out; }
+@keyframes pop { from { transform: scale(.3); opacity: 0; } to { transform: scale(1); opacity: 1; } }
