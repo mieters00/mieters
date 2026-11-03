@@ -287,7 +287,7 @@ async function schaakPartij(id) {
             const klas = ['vak', ((i >> 3) + (i & 7)) % 2 ? 'donker' : 'licht'];
             if (i === sel) klas.push('sel');
             if (R.laatste && (i === R.laatste.from || i === R.laatste.to)) klas.push('laatste');
-            if (i === schaak) klas.push('schaak');
+            if (i === schaak) klas.push('in-schaak');
             if (doelen.some(m => m.to === i)) klas.push('doel', x ? 'doel-bezet' : 'doel-leeg');
             cellen += `<div class="${klas.join(' ')}" data-i="${i}">${x ? `<span class="st ${x === x.toUpperCase() ? 'w' : 'z'}">${GLYPH[x.toUpperCase()]}</span>` : ''}</div>`;
         }
