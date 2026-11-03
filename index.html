@@ -7,6 +7,11 @@
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' https://fonts.googleapis.com; style-src-attr 'unsafe-inline'; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https://tuffgmfdoaqmsmuqchdd.supabase.co; connect-src https://tuffgmfdoaqmsmuqchdd.supabase.co wss://tuffgmfdoaqmsmuqchdd.supabase.co; object-src 'none'; base-uri 'none'; form-action 'self'">
     <!-- Geen adres van deze pagina meesturen naar andere sites (ook niet via tijdelijke fotolinks) -->
     <meta name="referrer" content="no-referrer">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="apple-touch-icon" href="image/apple-touch-icon.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Mieters">
+    <meta name="theme-color" content="#13342c">
     <title>Mieters</title>
     <link rel="icon" type="image/png" href="image/mieters.png">
     <!-- Sneller: verbinding alvast opzetten en het lettertype direct laden (eerder via @import in style.css, dat is trager) -->
@@ -15,13 +20,14 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600;800&display=swap">
-    <link rel="stylesheet" href="style.css?v=6">
+    <link rel="stylesheet" href="style.css?v=7">
     <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
     <script defer src="config.js"></script>
-    <script defer src="schaken.js?v=6"></script>
-    <script defer src="dammen.js?v=6"></script>
-    <script defer src="computer.js?v=6"></script>
-    <script defer src="app.js?v=6"></script>
+    <script defer src="schaken.js?v=7"></script>
+    <script defer src="dammen.js?v=7"></script>
+    <script defer src="computer.js?v=7"></script>
+    <script defer src="meldingen.js?v=7"></script>
+    <script defer src="app.js?v=7"></script>
 </head>
 <body>
     <header class="header"><nav class="menu" id="menu"></nav></header>

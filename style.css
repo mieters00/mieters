@@ -223,3 +223,7 @@ canvas.snake { width: 100%; max-width: 510px; display: block; border-radius: 0 0
 .vak.doel.doel-leeg::after { animation: pop .18s ease-out; }
 .dvak.doel::after { animation: pop .18s ease-out; }
 @keyframes pop { from { transform: scale(.3); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+/* Meldingen */
+#meld { margin: 18px 0; }
+#meld p { margin-bottom: 8px; color: var(--zacht); font-size: 14px; }

@@ -243,6 +243,7 @@ async function profile() {
         ${avatar(me, 150)}<br><br>
         <form id="pf"><input type="file" name="file" accept="image/*" required><br><br>
         <button>Profielfoto uploaden</button> <span class="fout" id="fout"></span></form>
+        <div id="meld"></div>
         <button id="uit">Uitloggen</button></div>
         <h3>Mijn foto's</h3>
         <div class="fotos">${(fotos || []).map(r => `
@@ -279,7 +280,8 @@ async function profile() {
         me = null;
         location.hash = '#/';
     };
-    $('uit').onclick = async () => { await sb.auth.signOut(); me = null; location.hash = '#/'; };
+    $('uit').onclick = async () => { try { await meldingenUit(); } catch (e) {} await sb.auth.signOut(); me = null; location.hash = '#/'; };
+    meldingBlok();
     app.querySelectorAll('.x').forEach(b => b.onclick = async () => {
         if (!confirm('Wil je deze foto verwijderen?')) return;
         await sb.from('photos').delete().eq('id', b.dataset.id);
