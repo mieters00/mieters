@@ -151,6 +151,28 @@ const GLYPH = { K: '♚', Q: '♛', R: '♜', B: '♝', N: '♞', P: '♟\uFE0E'
 const REDEN = { mat: 'schaakmat', pat: 'pat', '50': '50 zetten', materiaal: 'te weinig materiaal', herhaling: 'driemaal dezelfde stelling' };
 const uitslag = g => (g.result === 'remise' ? 'Remise' : g.result === (g.white === me.id ? 'wit' : 'zwart') ? 'Gewonnen' : 'Verloren') + (g.reden ? ' · ' + g.reden : '');
 
+// ---------- Animatie (gedeeld door schaken en dammen) ----------
+const GEEN_ANIMATIE = () => window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+// Laat een stuk van zijn beginvak over de vakken in "route" naar zijn eindvak schuiven (bij dammen kunnen dat er meerdere zijn)
+function schuif(bord, el, van, route, ms) {
+    if (!el || !el.animate || GEEN_ANIMATIE()) return;
+    const pos = i => { const c = bord.querySelector(`[data-i="${i}"]`); return c && c.getBoundingClientRect(); };
+    const eind = pos(route[route.length - 1]), stappen = [van, ...route].map(pos);
+    if (!eind || stappen.some(r => !r)) return;
+    el.style.position = 'relative';
+    el.style.zIndex = 5;
+    el.animate(stappen.map(r => ({ transform: `translate(${r.left - eind.left}px, ${r.top - eind.top}px)` })),
+        { duration: ms * route.length, easing: 'ease-in-out' });
+}
+// Een geslagen stuk blijft heel even staan en vervaagt dan, zodat je ziet wat er gebeurt
+function spook(bord, i, html, wacht, duur = 220) {
+    const c = bord.querySelector(`[data-i="${i}"]`);
+    if (!c || !c.animate || GEEN_ANIMATIE()) return;
+    c.insertAdjacentHTML('beforeend', `<span class="spook">${html}</span>`);
+    const s = c.lastElementChild;
+    s.animate([{ opacity: 1, transform: 'scale(1)' }, { opacity: 0, transform: 'scale(.6)' }], { duration: duur, delay: wacht, fill: 'both' }).onfinish = () => s.remove();
+}
+
 function schaakLobby() { return spelLobby({ tabel: 'chess_games', sel: SCHAAK_SEL, hash: 'schaak', start: { fen: SCHAAK.START } }); }
 
 // C = { tabel, sel, hash, start } beschrijft het spel: schaken (chess_games) of dammen (draughts_games)
@@ -220,7 +242,7 @@ async function schaakPartij(id) {
     app.innerHTML = '<div class="schaak"><p class="intro">Laden...</p></div>';
     const { data } = BOT ? { data: botPartij(BOT) } : await sb.from('chess_games').select(SCHAAK_SEL).eq('id', id).maybeSingle();
     if (!data) { app.innerHTML = '<div class="schaak"><p class="intro">Deze partij bestaat niet (meer). <a href="#/games/schaken">Terug</a></p></div>'; return; }
-    let g = data, sel = -1, kies = null;
+    let g = data, sel = -1, kies = null, getoond = -1;      // getoond = aantal zetten dat al op het scherm stond
     const wit = () => g.white === me.id;
 
     let weg = false;
@@ -228,7 +250,12 @@ async function schaakPartij(id) {
     function botZet() {      // is de computer aan de beurt, dan laat hij even na en zet
         if (!BOT || weg || g.status !== 'bezig') return;
         if (SCHAAK.replay(g.moves).s.turn === (wit() ? 'w' : 'b')) return;
-        setTimeout(() => { if (weg) return; const R = SCHAAK.replay(g.moves), m = CHESSBOT.kies(R.s, R.keys, +BOT[1]); if (m) zet(m, R); }, 80);
+        const n = g.moves.length, t0 = Date.now();
+        setTimeout(() => {      // eerst even wachten, zodat jouw zet klaar is met schuiven
+            if (weg) return;
+            const R = SCHAAK.replay(g.moves), m = CHESSBOT.kies(R.s, R.keys, +BOT[1]);
+            setTimeout(() => { if (!weg && m && g.status === 'bezig' && g.moves.length === n) zet(m, R); }, Math.max(0, BOTWACHT[+BOT[1]] - (Date.now() - t0)));
+        }, 450);
     }
     async function wijzig(velden) {
         if (BOT) { g = { ...g, ...velden }; sel = -1; kies = null; render(); botZet(); return; }
@@ -286,6 +313,17 @@ async function schaakPartij(id) {
             <div class="sch-knoppen">${knoppen}</div>
             <div class="sch-zetten">${lijst || '<span class="sch-info">Nog geen zetten.</span>'}</div></div>`;
 
+        if (getoond >= 0 && g.moves.length > getoond && R.laatste) {      // er is een nieuwe zet: laat hem zien
+            const m = R.laatste, bord = $('sch-bord'), vorig = SCHAAK.replay(g.moves.slice(0, -1)).s;
+            schuif(bord, bord.querySelector(`[data-i="${m.to}"] .st`), m.from, [m.to], 280);
+            if (m.castle) {
+                const van = m.castle === 'k' ? m.from + 3 : m.from - 4, naar = m.castle === 'k' ? m.from + 1 : m.from - 1;
+                schuif(bord, bord.querySelector(`[data-i="${naar}"] .st`), van, [naar], 280);
+            }
+            const vangst = m.ep ? m.to + (vorig.turn === 'w' ? 8 : -8) : m.to, geslagen = vorig.b[vangst];
+            if (geslagen) spook(bord, vangst, `<span class="st ${geslagen === geslagen.toUpperCase() ? 'w' : 'z'}">${GLYPH[geslagen.toUpperCase()]}</span>`, 180);
+        }
+        getoond = g.moves.length;
         const klik = (id, f) => { const el = $(id); if (el) el.onclick = f; };
         klik('sch-acc', () => wijzig({ status: 'bezig' }));
         klik('sch-weiger', async () => { await sb.from('chess_games').delete().eq('id', g.id); location.hash = '#/games/schaken'; });
