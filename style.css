@@ -1,3 +1,4 @@
+
 :root { --bg:#f6f5f1; --kaart:#fff; --tekst:#1d231f; --zacht:#6a716b; --lijn:#dcdad2; --primair:#0b7a5e; --pt:#fff; --header:#13342c; --accent:#e8b84a; --bubbel:#fff; --eigen:#d7efe3; --chatbg:#ecebe5; --r:8px; }
 @media (prefers-color-scheme: dark) { :root { --bg:#0e1311; --kaart:#171e1b; --tekst:#e6ece8; --zacht:#8f9c95; --lijn:#2a3530; --primair:#2fbf93; --pt:#06130e; --header:#09100d; --accent:#e8b84a; --bubbel:#1f2824; --eigen:#17493a; --chatbg:#111815; } }
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -196,8 +197,8 @@ canvas.snake { width: 100%; max-width: 510px; display: block; border-radius: 0 0
 .vak.laatste { box-shadow: inset 0 0 0 100px rgba(255, 235, 59, .35); }
 .vak.sel { background: #f6e05e; }
 .vak.schaak { background: radial-gradient(#e8503a 25%, #b58863 80%); }
-.vak.doel.leeg::after { content: ''; position: absolute; width: 28%; height: 28%; border-radius: 50%; background: rgba(11, 122, 94, .6); }
-.vak.doel.bezet::after { content: ''; position: absolute; inset: 4px; border-radius: 50%; border: 4px solid rgba(11, 122, 94, .65); }
+.vak.doel.doel-leeg::after { content: ''; position: absolute; width: 28%; height: 28%; border-radius: 50%; background: rgba(11, 122, 94, .6); }
+.vak.doel.doel-bezet::after { content: ''; position: absolute; inset: 4px; border-radius: 50%; border: 4px solid rgba(11, 122, 94, .65); }
 .st.w { color: #fff; text-shadow: 0 0 2px #000, 0 0 3px #000, 0 0 3px #000; }
 .st.z { color: #1b1b1b; text-shadow: 0 0 1px rgba(255, 255, 255, .45); }
 @media (hover: none) { .vak { cursor: default; } }
