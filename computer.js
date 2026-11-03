@@ -1,6 +1,7 @@
 // ---------- De computer als tegenstander ----------
 // Draait helemaal in je browser: geen server, geen kosten. De partij wordt niet bewaard.
 const BOTNAAM = ['', 'Computer (makkelijk)', 'Computer (gemiddeld)', 'Computer (moeilijk)'];
+const BOTWACHT = [0, 1000, 1500, 2200];      // minimale tijd (ms) tot de computer zet, zodat hij niet meteen terugspeelt
 function botPartij(B) {      // B = resultaat van /^bot-([123])-([wz])$/
     const ik = B[2] === 'w', bot = { username: BOTNAAM[+B[1]], avatar: null };
     return { id: 'bot', white: ik ? me.id : 'bot', black: ik ? 'bot' : me.id, created_by: me.id, status: 'bezig', moves: [], result: null, reden: null, draw_offer: null, w: ik ? me : bot, z: ik ? bot : me };
