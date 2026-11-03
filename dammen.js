@@ -95,15 +95,24 @@ const DREDEN = { geenzetten: 'geen zetten meer', herhaling: 'driemaal dezelfde s
 function damLobby() { return spelLobby({ tabel: 'draughts_games', sel: DAM_SEL, hash: 'dam', start: {} }); }
 
 async function damPartij(id) {
-    if (!/^[0-9a-f-]{36}$/i.test(id)) { location.hash = '#/games/dammen'; return; }
+    const BOT = /^bot-([123])-([wz])$/.exec(id);      // tegen de computer: niets in de database
+    if (!BOT && !/^[0-9a-f-]{36}$/i.test(id)) { location.hash = '#/games/dammen'; return; }
     app.innerHTML = '<div class="schaak"><p class="intro">Laden...</p></div>';
     const haal = () => sb.from('draughts_games').select(DAM_SEL).eq('id', id).maybeSingle();
-    const { data } = await haal();
+    const { data } = BOT ? { data: botPartij(BOT) } : await haal();
     if (!data) { app.innerHTML = '<div class="schaak"><p class="intro">Deze partij bestaat niet (meer). <a href="#/games/dammen">Terug</a></p></div>'; return; }
     let g = data, sel = -1, pad = [];
     const wit = () => g.white === me.id;
 
+    let weg = false;
+    cleanup.push(() => { weg = true; });
+    function botZet() {
+        if (!BOT || weg || g.status !== 'bezig') return;
+        if (DAM.replay(g.moves).s.turn === (wit() ? 'w' : 'z')) return;
+        setTimeout(() => { if (weg) return; const R = DAM.replay(g.moves), m = DAMBOT.kies(R.s, R.keys, +BOT[1]); if (m) zet(m, R); }, 80);
+    }
     async function wijzig(velden) {
+        if (BOT) { g = { ...g, ...velden }; sel = -1; pad = []; render(); botZet(); return; }
         const { data: d, error } = await sb.from('draughts_games').update(velden).eq('id', g.id).select(DAM_SEL).single();
         if (error) { toast('Dat mag nu niet.'); const { data: vers } = await haal(); if (vers) g = vers; } else g = d;
         sel = -1; pad = []; render();
@@ -141,7 +150,7 @@ async function damPartij(id) {
         let knoppen = '';
         if (g.status === 'uitgenodigd' && g.created_by !== me.id) knoppen = '<button id="sch-acc">Accepteren</button> <button id="sch-weiger" class="header-knop">Weigeren</button>';
         if (bezig) {
-            knoppen = '<button id="sch-op" class="header-knop">Opgeven</button> ' + (g.draw_offer === me.id
+            knoppen = '<button id="sch-op" class="header-knop">Opgeven</button> ' + (BOT ? '' : g.draw_offer === me.id
                 ? '<button id="sch-remise-weg" class="header-knop">Remise-voorstel intrekken</button>'
                 : g.draw_offer ? '<span class="sch-info">Remise voorgesteld:</span> <button id="sch-remise-ja">Accepteren</button> <button id="sch-remise-weg" class="header-knop">Weigeren</button>'
                 : '<button id="sch-remise" class="header-knop">Remise voorstellen</button>');
@@ -186,10 +195,11 @@ async function damPartij(id) {
         };
     }
 
-    const kanaal = sb.channel('dam-' + id).on('postgres_changes', { event: '*', schema: 'public', table: 'draughts_games', filter: 'id=eq.' + id }, p => {
+    const kanaal = BOT ? null : sb.channel('dam-' + id).on('postgres_changes', { event: '*', schema: 'public', table: 'draughts_games', filter: 'id=eq.' + id }, p => {
         if (p.eventType === 'DELETE') { location.hash = '#/games/dammen'; return; }
         g = { ...g, ...p.new }; sel = -1; pad = []; render();
     }).subscribe();
-    cleanup.push(() => sb.removeChannel(kanaal));
+    if (kanaal) cleanup.push(() => sb.removeChannel(kanaal));
     render();
+    botZet();
 }

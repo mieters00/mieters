@@ -159,7 +159,11 @@ async function spelLobby(C) {
     if (!me) { el.innerHTML = '<p class="intro">Log in om te spelen. <a href="#/login">Inloggen</a></p>'; return; }
     el.innerHTML = `<div class="schaak-lobby"><form id="uitdaag" class="blok"><h3>Daag iemand uit</h3>
         <select name="tegen" required><option value="">Kies een speler</option></select> <button>Uitdagen</button>
-        <p class="fout" id="sch-fout"></p></form><div id="sch-lijst"></div></div>`;
+        <p class="fout" id="sch-fout"></p></form>
+        <form id="botform" class="blok"><h3>Speel tegen de computer</h3>
+        <select name="niveau"><option value="1">Makkelijk</option><option value="2" selected>Gemiddeld</option><option value="3">Moeilijk</option></select>
+        <select name="kleur"><option value="w">Ik speel wit</option><option value="z">Ik speel zwart</option></select> <button>Start</button>
+        <p class="intro" style="margin:8px 0 0">Deze partij wordt niet bewaard.</p></form><div id="sch-lijst"></div></div>`;
     sb.from('profiles').select('id,username').neq('id', me.id).order('username').limit(500).then(({ data }) => {
         const s = document.querySelector('#uitdaag select');
         if (s) (data || []).forEach(p => s.add(new Option(p.username, p.id)));
@@ -173,6 +177,7 @@ async function spelLobby(C) {
         $('sch-fout').textContent = error ? 'Uitdagen lukte niet. Je kunt maximaal 10 uitnodigingen open hebben.' : '';
         if (!error) laad();
     };
+    $('botform').onsubmit = e => { e.preventDefault(); location.hash = `#/${C.hash}/bot-${e.target.niveau.value}-${e.target.kleur.value}`; };
     async function laad() {
         if (!$('sch-lijst')) return;
         const { data } = await sb.from(C.tabel).select(C.sel).order('updated_at', { ascending: false }).limit(40);
@@ -210,14 +215,23 @@ async function spelLobby(C) {
 }
 
 async function schaakPartij(id) {
-    if (!/^[0-9a-f-]{36}$/i.test(id)) { location.hash = '#/games/schaken'; return; }
+    const BOT = /^bot-([123])-([wz])$/.exec(id);      // tegen de computer: niets in de database
+    if (!BOT && !/^[0-9a-f-]{36}$/i.test(id)) { location.hash = '#/games/schaken'; return; }
     app.innerHTML = '<div class="schaak"><p class="intro">Laden...</p></div>';
-    const { data } = await sb.from('chess_games').select(SCHAAK_SEL).eq('id', id).maybeSingle();
+    const { data } = BOT ? { data: botPartij(BOT) } : await sb.from('chess_games').select(SCHAAK_SEL).eq('id', id).maybeSingle();
     if (!data) { app.innerHTML = '<div class="schaak"><p class="intro">Deze partij bestaat niet (meer). <a href="#/games/schaken">Terug</a></p></div>'; return; }
     let g = data, sel = -1, kies = null;
     const wit = () => g.white === me.id;
 
+    let weg = false;
+    cleanup.push(() => { weg = true; });
+    function botZet() {      // is de computer aan de beurt, dan laat hij even na en zet
+        if (!BOT || weg || g.status !== 'bezig') return;
+        if (SCHAAK.replay(g.moves).s.turn === (wit() ? 'w' : 'b')) return;
+        setTimeout(() => { if (weg) return; const R = SCHAAK.replay(g.moves), m = CHESSBOT.kies(R.s, R.keys, +BOT[1]); if (m) zet(m, R); }, 80);
+    }
     async function wijzig(velden) {
+        if (BOT) { g = { ...g, ...velden }; sel = -1; kies = null; render(); botZet(); return; }
         const { data: d, error } = await sb.from('chess_games').update(velden).eq('id', g.id).select(SCHAAK_SEL).single();
         if (error) {
             toast('Dat mag nu niet.');
@@ -257,7 +271,7 @@ async function schaakPartij(id) {
         let knoppen = '';
         if (g.status === 'uitgenodigd' && g.created_by !== me.id) knoppen = '<button id="sch-acc">Accepteren</button> <button id="sch-weiger" class="header-knop">Weigeren</button>';
         if (bezig) {
-            knoppen = '<button id="sch-op" class="header-knop">Opgeven</button> ' + (g.draw_offer === me.id
+            knoppen = '<button id="sch-op" class="header-knop">Opgeven</button> ' + (BOT ? '' : g.draw_offer === me.id
                 ? '<button id="sch-remise-weg" class="header-knop">Remise-voorstel intrekken</button>'
                 : g.draw_offer ? '<span class="sch-info">Remise voorgesteld:</span> <button id="sch-remise-ja">Accepteren</button> <button id="sch-remise-weg" class="header-knop">Weigeren</button>'
                 : '<button id="sch-remise" class="header-knop">Remise voorstellen</button>');
@@ -290,10 +304,11 @@ async function schaakPartij(id) {
         };
     }
 
-    const kanaal = sb.channel('schaak-' + id).on('postgres_changes', { event: '*', schema: 'public', table: 'chess_games', filter: 'id=eq.' + id }, p => {
+    const kanaal = BOT ? null : sb.channel('schaak-' + id).on('postgres_changes', { event: '*', schema: 'public', table: 'chess_games', filter: 'id=eq.' + id }, p => {
         if (p.eventType === 'DELETE') { location.hash = '#/games/schaken'; return; }
         g = { ...g, ...p.new }; sel = -1; kies = null; render();
     }).subscribe();
-    cleanup.push(() => sb.removeChannel(kanaal));
+    if (kanaal) cleanup.push(() => sb.removeChannel(kanaal));
     render();
+    botZet();
 }
