@@ -280,8 +280,8 @@ async function profile() {
         me = null;
         location.hash = '#/';
     };
-    $('uit').onclick = async () => { try { await meldingenUit(); } catch (e) {} await sb.auth.signOut(); me = null; location.hash = '#/'; };
-    meldingBlok();
+    $('uit').onclick = async () => { try { if (typeof meldingenUit === 'function') await meldingenUit(); } catch (e) {} await sb.auth.signOut(); me = null; location.hash = '#/'; };
+    if (typeof meldingBlok === 'function') meldingBlok();      // alleen als meldingen.js er staat
     app.querySelectorAll('.x').forEach(b => b.onclick = async () => {
         if (!confirm('Wil je deze foto verwijderen?')) return;
         await sb.from('photos').delete().eq('id', b.dataset.id);
@@ -644,6 +644,7 @@ const SPELLEN = {
     wordle: { naam: 'Woordspel', geenScores: true },
     schaken: { naam: 'Schaken', geenScores: true },
     dammen: { naam: 'Dammen', geenScores: true },
+    drift: { naam: 'Drift' },
 };
 
 function games(spel) {
@@ -651,7 +652,7 @@ function games(spel) {
     app.innerHTML = `<h2>Spellen</h2>
         <div class="spel-tabs">${Object.entries(SPELLEN).map(([k, s]) => `<a href="#/games/${k}" class="${k === spel ? 'actief' : ''}">${s.naam}</a>`).join('')}</div>
         <div class="spel-wrap"><div id="speelveld"></div><div id="scores"></div></div>`;
-    ({ snake, wordle, schaken: schaakLobby, dammen: damLobby })[spel]();
+    ({ snake, wordle, schaken: schaakLobby, dammen: damLobby, drift })[spel]();
     laadScores(spel);
 }
 
