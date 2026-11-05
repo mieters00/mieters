@@ -644,7 +644,6 @@ const SPELLEN = {
     wordle: { naam: 'Woordspel', geenScores: true },
     schaken: { naam: 'Schaken', geenScores: true },
     dammen: { naam: 'Dammen', geenScores: true },
-    drift: { naam: 'Drift' },
 };
 
 function games(spel) {
