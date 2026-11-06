@@ -280,3 +280,8 @@ canvas.snake { width: 100%; max-width: 510px; display: block; border-radius: 0 0
 .dr-touch [data-k].aan { background: var(--accent); color: #13342c; }
 .dr-touch .dr-autogas { position: absolute; left: 12px; top: 64px; width: auto; height: auto; border-radius: 8px; padding: 6px 10px; font-size: 12px; pointer-events: auto; }
 .dr-uitleg { max-width: 760px; margin-top: 10px; }
+.dr-pijl.klein { width: 34px; height: 34px; font-size: 14px; }
+.dr-kaartrij .dr-info { padding: 6px 10px; }
+.dr-kaartrij .dr-info p { margin: 1px 0 3px; font-size: 12px; }
+.dr-kaartrij small { font-size: 12px; opacity: .88; }
+.dr-titel small { font-size: .6em; opacity: .85; font-weight: 600; }

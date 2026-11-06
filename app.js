@@ -644,6 +644,7 @@ const SPELLEN = {
     wordle: { naam: 'Woordspel', geenScores: true },
     schaken: { naam: 'Schaken', geenScores: true },
     dammen: { naam: 'Dammen', geenScores: true },
+    drift: { naam: 'Drift' },
 };
 
 function games(spel) {
@@ -666,10 +667,10 @@ async function bewaarScore(spel, score) {
 async function laadScores(spel) {
     const el = $('scores');
     if (!el) return;
-    if (SPELLEN[spel].geenScores) { el.innerHTML = ''; return; }
+    if ((SPELLEN[spel] || {}).geenScores) { el.innerHTML = ''; return; }
     const { data } = await sb.from('highscores').select('score,profiles(username,avatar)')
         .eq('game', spel).order('score', { ascending: false }).limit(10);
-    el.innerHTML = `<h3>Top 10</h3>` + ((data || []).map((r, i) => `
+    el.innerHTML = `<h3>${typeof scoreTitel === 'function' ? esc(scoreTitel(spel)) : 'Top 10'}</h3>` + ((data || []).map((r, i) => `
         <div class="score-rij"><span>${i + 1}.</span>${avatar(r.profiles, 22)}
         <strong>${esc(r.profiles && r.profiles.username)}</strong><span class="punten">${r.score}</span></div>`).join('')
         || '<p class="leeg">Nog geen scores.</p>') + (me ? '' : '<p class="intro">Log in om je score te bewaren.</p>');

@@ -1,6 +1,6 @@
 // ---------- Drift (3D): spelregels en natuurkunde ----------
 const DRIFT = (() => {
-    const ARENA = 70;        // straal van het speelveld in meters
+    const RAND = 2.0;        // zo ver (m) van de rand botst het midden van de auto
     const RONDE = 90;        // seconden per rit
     // unlock = het aantal punten dat je beste rit minstens moet hebben om deze auto te rijden
     const CARS = [
@@ -16,21 +16,14 @@ const DRIFT = (() => {
     ];
     const klem = (v, a, b) => Math.max(a, Math.min(b, v));
 
-    function nieuwAuto(c) {
-        return { c, x: 0, z: -32, yaw: Math.PI / 2, vx: 0, vz: 0, yr: 0, steerV: 0, speed: 0, vf: 0, vl: 0, ang: 0, acc: 0 };
+    function nieuwAuto(c, start) {
+        return { c, x: start.x, z: start.z, yaw: start.yaw, vx: 0, vz: 0, yr: 0, steerV: 0, speed: 0, vf: 0, vl: 0, ang: 0, acc: 0 };
     }
 
-    // Kegels: twee ringen om tegenaan te rijden. Elke omgereden kegel geeft punten.
-    function maakKegels() {
-        const k = [];
-        const ring = (n, r, off) => { for (let i = 0; i < n; i++) { const t = off + (i / n) * Math.PI * 2; k.push({ x: Math.cos(t) * r, z: Math.sin(t) * r, vx: 0, vz: 0, omlaag: false, tilt: 0, richting: 0 }); } };
-        ring(24, 48, 0.1);
-        ring(12, 20, 0.4);
-        return k;
-    }
+    const maakKegels = kaart => kaart.kegelPlekken.map(p => ({ x: p.x, z: p.z, vx: 0, vz: 0, omlaag: false, tilt: 0, richting: 0 }));
 
     // Eén tijdstapje. inp = { steer: -1..1 (links = +1), gas, brake, hand }
-    function stap(a, inp, dt, kegels) {
+    function stap(a, inp, dt, kegels, kaart) {
         const c = a.c, ev = { muur: 0, kegels: 0 };
         a.steerV += (inp.steer - a.steerV) * Math.min(1, 9 * dt);
         const hb = inp.hand ? 1 : 0, gas = inp.gas ? 1 : 0;
@@ -69,16 +62,17 @@ const DRIFT = (() => {
         a.z += a.vz * dt;
         if (!gas && !inp.brake && Math.hypot(a.vx, a.vz) < 0.15) { a.vx = 0; a.vz = 0; vf = 0; vl = 0; }
 
-        // muur
-        const d = Math.hypot(a.x, a.z), lim = ARENA - 2.0;
-        if (d > lim) {
-            const nx = a.x / d, nz = a.z / d, vn = a.vx * nx + a.vz * nz;
-            a.x = nx * lim; a.z = nz * lim;
-            if (vn > 0) {
-                a.vx -= 1.3 * vn * nx; a.vz -= 1.3 * vn * nz;
-                a.vx *= 0.85; a.vz *= 0.85;
-                if (vn > 3) ev.muur = vn;
-            }
+        // rand en obstakels: terugduwen en afkaatsen
+        const botst = (nx, nz, diep) => {
+            a.x -= nx * diep; a.z -= nz * diep;
+            const vn = a.vx * nx + a.vz * nz;
+            if (vn > 0) { a.vx -= 1.3 * vn * nx; a.vz -= 1.3 * vn * nz; a.vx *= 0.85; a.vz *= 0.85; if (vn > 3) ev.muur = Math.max(ev.muur, vn); }
+        };
+        const g = kaart.grens(a.x, a.z);
+        if (g.d > -RAND) botst(g.nx, g.nz, g.d + RAND);
+        for (const o of kaart.obstakels) {
+            const dx = a.x - o.x, dz = a.z - o.z, dd = Math.hypot(dx, dz), min = o.r + 1.8;
+            if (dd < min) botst(-dx / (dd || 1), -dz / (dd || 1), min - dd);
         }
         // kegels
         if (kegels) for (const k of kegels) {
@@ -129,7 +123,99 @@ const DRIFT = (() => {
         if (r.tijd === 0 && r.ketting > 0) bank();
         return uit;
     }
-    return { ARENA, RONDE, CARS, nieuwAuto, maakKegels, stap, stapKegels, nieuweRonde, tel, klem };
+
+    // ---------- kaarten ----------
+    // sleutel = de naam waaronder de scores in de database staan (elke kaart heeft zijn eigen Top 10)
+    const KAARTEN = [
+        { id: 'veld', naam: 'Parkeerplaats', sleutel: 'drift', type: 'cirkel', R: 70, tekst: 'Groot rond veld met twee ringen kegels. Hier begin je.' },
+        { id: 'industrie', naam: 'Industrieterrein', sleutel: 'drift-industrie', type: 'rechthoek', hx: 85, hz: 55, r: 28, tekst: 'Rechthoekig terrein met olietanks om omheen te driften en kegels om te slalommen.' },
+        { id: 'circuit', naam: 'Circuit', sleutel: 'drift-circuit', type: 'baan', breedte: 26, R: 76, harm: [[2, 0.26, 0], [3, 0.09, 1.0]], tekst: 'Een echt circuit met lange, ruime bochten.' },
+        { id: 'berg', naam: 'Bergweg', sleutel: 'drift-berg', type: 'baan', breedte: 18, R: 70, harm: [[3, 0.2, 0.3], [4, 0.1, 1.1]], tekst: 'Smalle weg met scherpe bochten. Hier moet je goed sturen.' },
+    ];
+    // zet een gesloten lijn om in punten met gelijke onderlinge afstand, plus de rijrichting (tx, tz)
+    function herbemonster(p, afstand) {
+        const n = p.length, lengte = [0];
+        for (let i = 0; i < n; i++) { const a = p[i], b = p[(i + 1) % n]; lengte.push(lengte[i] + Math.hypot(b.x - a.x, b.z - a.z)); }
+        const totaal = lengte[n], m = Math.max(8, Math.round(totaal / afstand)), uit = [];
+        let j = 0;
+        for (let i = 0; i < m; i++) {
+            const s = (i * totaal) / m;
+            while (j < n - 1 && lengte[j + 1] < s) j++;
+            const a = p[j], b = p[(j + 1) % n], f = (s - lengte[j]) / (lengte[j + 1] - lengte[j] || 1);
+            uit.push({ x: a.x + (b.x - a.x) * f, z: a.z + (b.z - a.z) * f });
+        }
+        for (let i = 0; i < m; i++) { const a = uit[i], b = uit[(i + 1) % m], l = Math.hypot(b.x - a.x, b.z - a.z) || 1; a.tx = (b.x - a.x) / l; a.tz = (b.z - a.z) / l; }
+        return uit;
+    }
+    function afgerondeRechthoek(hx, hz, r, stappen = 14) {
+        const p = [];
+        [[hx - r, hz - r, 0], [-(hx - r), hz - r, 90], [-(hx - r), -(hz - r), 180], [hx - r, -(hz - r), 270]].forEach(([cx, cz, g0]) => {
+            for (let i = 0; i <= stappen; i++) { const t = ((g0 + (90 * i) / stappen) * Math.PI) / 180; p.push({ x: cx + r * Math.cos(t), z: cz + r * Math.sin(t) }); }
+        });
+        return p;
+    }
+    function maakKaart(def) {
+        const k = { def, id: def.id, naam: def.naam, sleutel: def.sleutel, tekst: def.tekst, type: def.type, obstakels: [], kegelPlekken: [], muren: [], omtrek: null, midden: null, breedte: def.breedte || 0, straal: 0, start: { x: 0, z: 0, yaw: 0 } };
+        const res = { d: 0, nx: 1, nz: 0 };
+        const ring = (n, r, off, cx = 0, cz = 0) => { for (let i = 0; i < n; i++) { const t = off + (i / n) * Math.PI * 2; k.kegelPlekken.push({ x: cx + Math.cos(t) * r, z: cz + Math.sin(t) * r }); } };
+        if (def.type === 'cirkel') {
+            k.grens = (x, z) => { const r = Math.hypot(x, z) || 1e-9; res.d = r - def.R; res.nx = x / r; res.nz = z / r; return res; };
+            k.omtrek = Array.from({ length: 96 }, (_, i) => ({ x: Math.cos((i / 96) * 6.2832) * def.R, z: Math.sin((i / 96) * 6.2832) * def.R }));
+            k.muren = [herbemonster(Array.from({ length: 180 }, (_, i) => ({ x: Math.cos((i / 180) * 6.2832) * (def.R + 0.4), z: Math.sin((i / 180) * 6.2832) * (def.R + 0.4) })), 6.6)];
+            k.straal = def.R; k.start = { x: 0, z: -32, yaw: Math.PI / 2 };
+            ring(24, 48, 0.1); ring(12, 20, 0.4);
+        } else if (def.type === 'rechthoek') {
+            const { hx, hz, r } = def;
+            k.grens = (x, z) => {
+                const qx = Math.abs(x) - (hx - r), qz = Math.abs(z) - (hz - r), ox = Math.max(qx, 0), oz = Math.max(qz, 0), buiten = Math.hypot(ox, oz);
+                res.d = buiten + Math.min(Math.max(qx, qz), 0) - r;
+                if (buiten > 1e-9) { res.nx = Math.sign(x || 1) * (ox / buiten); res.nz = Math.sign(z || 1) * (oz / buiten); }
+                else if (qx > qz) { res.nx = Math.sign(x || 1); res.nz = 0; } else { res.nx = 0; res.nz = Math.sign(z || 1); }
+                return res;
+            };
+            k.omtrek = afgerondeRechthoek(hx, hz, r);
+            k.muren = [herbemonster(afgerondeRechthoek(hx + 0.4, hz + 0.4, r + 0.4, 24), 6.6)];
+            k.straal = Math.hypot(hx, hz); k.start = { x: -60, z: -38, yaw: Math.PI / 2 };
+            k.obstakels = [{ x: 0, z: 0, r: 6 }, { x: -50, z: 26, r: 4 }, { x: 50, z: 26, r: 4 }, { x: 52, z: -24, r: 4 }, { x: -22, z: 36, r: 3.5 }];
+            for (let x = -60; x <= 60; x += 15) k.kegelPlekken.push({ x, z: -22 });
+            for (let x = -52; x <= 68; x += 15) k.kegelPlekken.push({ x, z: 14 });
+            ring(10, 17, 0.2);
+            k.kegelPlekken = k.kegelPlekken.filter(p => k.grens(p.x, p.z).d < -6 && k.obstakels.every(o => Math.hypot(p.x - o.x, p.z - o.z) > o.r + 3) && Math.hypot(p.x - k.start.x, p.z - k.start.z) > 8);
+        } else {
+            const N = 1440, ruw = [];
+            for (let i = 0; i < N; i++) { const t = (i / N) * Math.PI * 2; let f = 1; for (const [m, a, ph] of def.harm) f += a * Math.cos(m * t + ph); ruw.push({ x: Math.cos(t) * def.R * f, z: Math.sin(t) * def.R * f }); }
+            const mid = herbemonster(ruw, 3), n = mid.length, h = def.breedte / 2;
+            k.midden = mid;
+            k.grens = (x, z) => {
+                let beste = 1e18, qx = 0, qz = 0, bi = 0;
+                for (let i = 0; i < n; i++) {
+                    const a = mid[i], b = mid[(i + 1) % n], sx = b.x - a.x, sz = b.z - a.z, l2 = sx * sx + sz * sz || 1;
+                    const t = Math.max(0, Math.min(1, ((x - a.x) * sx + (z - a.z) * sz) / l2)), px = a.x + sx * t, pz = a.z + sz * t, d2 = (x - px) ** 2 + (z - pz) ** 2;
+                    if (d2 < beste) { beste = d2; qx = px; qz = pz; bi = i; }
+                }
+                const d = Math.sqrt(beste);
+                res.d = d - h;
+                if (d > 1e-6) { res.nx = (x - qx) / d; res.nz = (z - qz) / d; } else { res.nx = mid[bi].tz; res.nz = -mid[bi].tx; }
+                return res;
+            };
+            const kant = o => herbemonster(mid.map(p => ({ x: p.x + p.tz * o, z: p.z - p.tx * o })), 6.6);
+            k.muren = [kant(h + 0.4), kant(-(h + 0.4))];
+            k.straal = Math.max(...mid.map(p => Math.hypot(p.x, p.z))) + h;
+            k.start = { x: mid[0].x, z: mid[0].z, yaw: Math.atan2(mid[0].tx, mid[0].tz) };
+            // kegels aan de binnenkant van de scherpste bochten
+            const kr = mid.map((_, i) => { const a = mid[(i - 4 + n) % n], b = mid[(i + 4) % n]; return Math.abs(Math.atan2(a.tx * b.tz - a.tz * b.tx, a.tx * b.tx + a.tz * b.tz)); });
+            const top = Math.max(...kr);
+            for (let i = 0; i < n; i++) {
+                let piek = kr[i] > top * 0.55;
+                for (let d = -10; d <= 10 && piek; d++) if (kr[(i + d + n) % n] > kr[i]) piek = false;
+                if (!piek || Math.min(i, n - i) < 14) continue;
+                const a = mid[(i - 4 + n) % n], b = mid[(i + 4) % n], links = (b.tx - a.tx) * mid[i].tz - (b.tz - a.tz) * mid[i].tx > 0 ? 1 : -1;
+                for (const v of [-3, 0, 3]) { const p = mid[(i + v + n) % n]; k.kegelPlekken.push({ x: p.x + p.tz * links * (h - 3.5), z: p.z - p.tx * links * (h - 3.5) }); }
+            }
+        }
+        return k;
+    }
+    return { RAND, RONDE, CARS, KAARTEN, maakKaart, herbemonster, nieuwAuto, maakKegels, stap, stapKegels, nieuweRonde, tel, klem };
 })();
 
 // ---------- Drift (3D): scherm ----------
@@ -181,11 +267,11 @@ async function drift() {
 }
 
 function driftBouw() {
-    const { ARENA, CARS } = DRIFT, DT = 1 / 90;
+    const { CARS, KAARTEN } = DRIFT, DT = 1 / 90;
     const scherm = $('dr-scherm'), canvas = $('dr-canvas');
     const kleur = h => new THREE.Color(h).convertSRGBToLinear();     // kleuren zoals ze er op het scherm uit moeten zien
     const opslag = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} } };
-    const sleutelBest = 'mieters.drift.best.' + (me ? me.id : 'gast');
+    const sleutelBest = k => 'mieters.drift.best.' + k + '.' + (me ? me.id : 'gast');
 
     let renderer;
     try { renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' }); }
@@ -199,32 +285,75 @@ function driftBouw() {
     scene.add(new THREE.HemisphereLight(0xffffff, kleur(0x6a7a58), 0.95));
     const zon = new THREE.DirectionalLight(0xffffff, 0.85); zon.position.set(60, 90, 40); scene.add(zon);
 
-    // ---------- de wereld ----------
+    // ---------- de wereld (wordt per kaart opgebouwd) ----------
     const lam = h => new THREE.MeshLambertMaterial({ color: kleur(h) });
-    const plat = (geo, mat, y) => { const m = new THREE.Mesh(geo, mat); m.rotation.x = -Math.PI / 2; m.position.y = y; scene.add(m); return m; };
-    plat(new THREE.CircleGeometry(450, 48), lam(0x4f9a49), -0.06);
-    plat(new THREE.CircleGeometry(ARENA, 96), lam(0x3c4046), 0);
-    const lijn = (r1, r2, h) => plat(new THREE.RingGeometry(r1, r2, 96), new THREE.MeshBasicMaterial({ color: kleur(h) }), 0.02);
-    lijn(ARENA - 6.4, ARENA - 6, 0xffffff); lijn(19.8, 20.2, 0xffd84a); lijn(47.8, 48.2, 0xffd84a);
-    plat(new THREE.PlaneGeometry(1.2, 28), new THREE.MeshBasicMaterial({ color: kleur(0xffffff) }), 0.025).position.set(0, 0.025, -34);
+    const dubbel = h => { const m = lam(h); m.side = THREE.DoubleSide; return m; };
+    const gras = new THREE.Mesh(new THREE.CircleGeometry(450, 48), lam(0x4f9a49)); gras.rotation.x = -Math.PI / 2; gras.position.y = -0.06; scene.add(gras);
+    const wereld = new THREE.Group(); scene.add(wereld);
     const dummy = new THREE.Object3D();
-    const N = 64, muur = new THREE.InstancedMesh(new THREE.BoxGeometry(6.8, 0.9, 1.2), lam(0xffffff), N);
-    for (let i = 0; i < N; i++) {
-        const t = (i / N) * Math.PI * 2;
-        dummy.position.set(Math.cos(t) * (ARENA + 0.4), 0.45, Math.sin(t) * (ARENA + 0.4));
-        dummy.rotation.set(0, -t - Math.PI / 2, 0); dummy.updateMatrix();
-        muur.setMatrixAt(i, dummy.matrix); muur.setColorAt(i, kleur(i % 2 ? 0xffffff : 0xd8342c));
+    function wisWereld() {
+        for (const o of [...wereld.children]) { wereld.remove(o); o.traverse(x => { if (x.geometry) x.geometry.dispose(); if (x.material) x.material.dispose(); }); }
     }
-    muur.instanceMatrix.needsUpdate = true; muur.instanceColor.needsUpdate = true; scene.add(muur);
-    let zaad = 7; const rnd = () => (zaad = (zaad * 16807) % 2147483647) / 2147483647;
-    const bomen = 110, kruin = new THREE.InstancedMesh(new THREE.ConeGeometry(2.4, 6, 8), lam(0x2f7d3a), bomen), stam = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.4, 0.5, 2, 6), lam(0x6b4a2b), bomen);
-    for (let i = 0; i < bomen; i++) {
-        const t = rnd() * Math.PI * 2, r = ARENA + 14 + rnd() * 110, s = 0.8 + rnd() * 0.9;
-        dummy.rotation.set(0, 0, 0); dummy.scale.setScalar(s);
-        dummy.position.set(Math.cos(t) * r, 5 * s, Math.sin(t) * r); dummy.updateMatrix(); kruin.setMatrixAt(i, dummy.matrix);
-        dummy.position.set(Math.cos(t) * r, 1 * s, Math.sin(t) * r); dummy.updateMatrix(); stam.setMatrixAt(i, dummy.matrix);
+    function bouwWereld(k) {
+        wisWereld();
+        const plat = (geo, mat, y) => { const m = new THREE.Mesh(geo, mat); m.rotation.x = -Math.PI / 2; m.position.y = y; wereld.add(m); return m; };
+        // een strook langs de middenlijn van een baan: offset = zijwaartse verschuiving, halve = halve breedte
+        const lint = (mid, offset, halve, y, mat) => {
+            const n = mid.length, pos = new Float32Array(n * 6), idx = [];
+            mid.forEach((p, i) => {
+                const nx = p.tz, nz = -p.tx;
+                pos.set([p.x + nx * (offset + halve), y, p.z + nz * (offset + halve), p.x + nx * (offset - halve), y, p.z + nz * (offset - halve)], i * 6);
+            });
+            for (let i = 0; i < n; i++) { const a = i * 2, b = ((i + 1) % n) * 2; idx.push(a, a + 1, b, a + 1, b + 1, b); }
+            const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setIndex(idx); geo.computeVertexNormals();
+            wereld.add(new THREE.Mesh(geo, mat));
+        };
+        const ringlijn = (r1, r2, h) => plat(new THREE.RingGeometry(r1, r2, 96), new THREE.MeshBasicMaterial({ color: kleur(h) }), 0.02);
+        const startlijn = (x, z, tx, tz, breedte) => {
+            const m = new THREE.Mesh(new THREE.PlaneGeometry(breedte, 1.4).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: kleur(0xffffff) }));
+            m.position.set(x, 0.04, z); m.rotation.y = Math.atan2(tx, tz); wereld.add(m);
+        };
+        if (k.type === 'baan') {
+            lint(k.midden, 0, k.breedte / 2, 0.01, dubbel(0x3c4046));
+            const witM = new THREE.MeshBasicMaterial({ color: kleur(0xffffff), side: THREE.DoubleSide });
+            lint(k.midden, k.breedte / 2 - 1, 0.18, 0.03, witM); lint(k.midden, -(k.breedte / 2 - 1), 0.18, 0.03, witM);
+            startlijn(k.midden[0].x, k.midden[0].z, k.midden[0].tx, k.midden[0].tz, k.breedte);
+        } else {
+            plat(new THREE.ShapeGeometry(new THREE.Shape(k.omtrek.map(p => new THREE.Vector2(p.x, -p.z)))), lam(k.type === 'rechthoek' ? 0x5b5f64 : 0x3c4046), 0);
+            if (k.type === 'cirkel') {
+                ringlijn(k.def.R - 6.4, k.def.R - 6, 0xffffff); ringlijn(19.8, 20.2, 0xffd84a); ringlijn(47.8, 48.2, 0xffd84a);
+                startlijn(0, -34, 0, 1, 28);
+            } else {
+                startlijn(k.start.x, k.start.z, 0, 1, 12);
+                const geel = new THREE.MeshBasicMaterial({ color: kleur(0xffd84a) });
+                for (const z of [-22, 14]) { const l = new THREE.Mesh(new THREE.PlaneGeometry(k.def.hx * 2 - 24, 0.3).rotateX(-Math.PI / 2), geel); l.position.set(0, 0.03, z + 5); wereld.add(l); }
+            }
+        }
+        // olietanks
+        for (const o of k.obstakels) {
+            const tank = new THREE.Mesh(new THREE.CylinderGeometry(o.r, o.r, 7, 28), lam(0xdfe3e6)); tank.position.set(o.x, 3.5, o.z); wereld.add(tank);
+            const band = new THREE.Mesh(new THREE.CylinderGeometry(o.r + 0.05, o.r + 0.05, 1, 28), lam(0xd8342c)); band.position.set(o.x, 3, o.z); wereld.add(band);
+            const dop = new THREE.Mesh(new THREE.CylinderGeometry(o.r * 0.8, o.r, 0.8, 28), lam(0x8b9298)); dop.position.set(o.x, 7.3, o.z); wereld.add(dop);
+        }
+        // muurblokken langs de rand: rood en wit
+        const blokken = k.muren.flat(), muur = new THREE.InstancedMesh(new THREE.BoxGeometry(6.8, 0.9, 1.2), lam(0xffffff), blokken.length);
+        blokken.forEach((p, i) => {
+            dummy.position.set(p.x, 0.45, p.z); dummy.rotation.set(0, Math.atan2(-p.tz, p.tx), 0); dummy.updateMatrix();
+            muur.setMatrixAt(i, dummy.matrix); muur.setColorAt(i, kleur(i % 2 ? 0xffffff : 0xd8342c));
+        });
+        muur.instanceMatrix.needsUpdate = true; muur.instanceColor.needsUpdate = true; wereld.add(muur);
+        // bomen buiten de kaart
+        let zaad = 7; const rnd = () => (zaad = (zaad * 16807) % 2147483647) / 2147483647;
+        const bomen = 110, kruin = new THREE.InstancedMesh(new THREE.ConeGeometry(2.4, 6, 8), lam(0x2f7d3a), bomen), stam = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.4, 0.5, 2, 6), lam(0x6b4a2b), bomen);
+        dummy.rotation.set(0, 0, 0);
+        for (let i = 0; i < bomen; i++) {
+            const t = rnd() * Math.PI * 2, r = k.straal + 14 + rnd() * 110, sc = 0.8 + rnd() * 0.9;
+            dummy.scale.setScalar(sc);
+            dummy.position.set(Math.cos(t) * r, 5 * sc, Math.sin(t) * r); dummy.updateMatrix(); kruin.setMatrixAt(i, dummy.matrix);
+            dummy.position.set(Math.cos(t) * r, 1 * sc, Math.sin(t) * r); dummy.updateMatrix(); stam.setMatrixAt(i, dummy.matrix);
+        }
+        dummy.scale.setScalar(1); wereld.add(kruin); wereld.add(stam);
     }
-    dummy.scale.setScalar(1); scene.add(kruin); scene.add(stam);
 
     // ---------- remsporen en rook ----------
     const MAXREM = 600, remGeo = new THREE.PlaneGeometry(0.34, 0.95); remGeo.rotateX(-Math.PI / 2);
@@ -283,7 +412,7 @@ function driftBouw() {
 
     // ---------- spelstaat ----------
     const S = {
-        fase: 'garage', keuze: 0, beste: 0, auto: null, a: null, ronde: null, kegels: [], kegelObj: [], rest: 0, aftel: 0, vorige: 0, raf: 0, laadNr: 0,
+        fase: 'garage', keuze: 0, kaartNr: 0, kaart: null, besten: {}, beste: 0, auto: null, a: null, ronde: null, kegels: [], kegelObj: [], rest: 0, aftel: 0, vorige: 0, raf: 0, laadNr: 0,
         camYaw: Math.PI / 2, camPos: new THREE.Vector3(), garageHoek: 0.6, shake: 0, remT: 0, rookT: 0, stil: opslag.get('mieters.drift.stil') === '1',
         autoGas: ('ontouchstart' in window) || (window.matchMedia && matchMedia('(pointer: coarse)').matches), touch: false, laden: false, audio: null, popT: 0, laatsteTekst: {},
     };
@@ -296,13 +425,24 @@ function driftBouw() {
 
     // kegels
     const resetKegels = async () => {
-        S.kegels = DRIFT.maakKegels();
+        S.kegels = DRIFT.maakKegels(S.kaart);
         const sjabloon = await kegelModel;
         if (!$('dr-canvas')) return;
         S.kegelObj.forEach(o => scene.remove(o)); S.kegelObj = [];
         for (const k of S.kegels) { const o = sjabloon.clone(true); o.rotation.order = 'YXZ'; o.position.set(k.x, 0, k.z); scene.add(o); S.kegelObj.push(o); }
     };
 
+    // ---------- kaart kiezen ----------
+    const kaartCache = [];
+    async function kiesKaart(i) {
+        S.kaartNr = ((i % KAARTEN.length) + KAARTEN.length) % KAARTEN.length;
+        S.kaart = kaartCache[S.kaartNr] || (kaartCache[S.kaartNr] = DRIFT.maakKaart(KAARTEN[S.kaartNr]));
+        opslag.set('mieters.drift.kaart', S.kaart.id);
+        bouwWereld(S.kaart); wisRem();
+        if ($('scores')) laadScores(S.kaart.sleutel);
+        menu();
+        await resetKegels();
+    }
     // ---------- garage ----------
     async function kiesAuto(i) {
         S.keuze = ((i % CARS.length) + CARS.length) % CARS.length;
@@ -321,15 +461,21 @@ function driftBouw() {
         m.hidden = false;
         if (S.fase === 'klaar') return;           // het resultaatscherm vult het menu zelf
         const c = CARS[S.keuze], vrij = open(S.keuze);
-        m.innerHTML = `<div class="dr-titel">Kies je auto</div>
+        const kk = S.kaart, kb = S.besten[kk.sleutel] || 0;
+        m.innerHTML = `<div class="dr-titel">Kies je auto en kaart</div>
             <div class="dr-rij"><button class="dr-pijl" id="dr-vorige">&#9664;</button>
               <div class="dr-info"><b>${esc(c.naam)}</b> ${vrij ? '' : '<span class="dr-slot">&#128274; vanaf ' + c.unlock + ' punten</span>'}
                 <p>${esc(c.tekst)}</p>
                 ${balk('Snelheid', c.maxSpeed / 40)}${balk('Optrekken', c.accel / 20)}${balk('Driftgemak', (8.2 - c.grip) / 3.2)}</div>
               <button class="dr-pijl" id="dr-volgende">&#9654;</button></div>
             <div class="dr-lijst">${CARS.map((x, i) => `<button class="dr-chip ${i === S.keuze ? 'actief' : ''} ${open(i) ? '' : 'slot'}" data-i="${i}">${open(i) ? '' : '&#128274; '}${esc(x.naam)}</button>`).join('')}</div>
+            <div class="dr-rij dr-kaartrij"><button class="dr-pijl klein" id="dr-kvorige">&#9664;</button>
+              <div class="dr-info"><b>Kaart ${S.kaartNr + 1} van ${KAARTEN.length}: ${esc(kk.naam)}</b><p>${esc(kk.tekst)}</p><small>Jouw beste op deze kaart: <b>${kb}</b></small></div>
+              <button class="dr-pijl klein" id="dr-kvolgende">&#9654;</button></div>
             <button class="dr-start" id="dr-start" ${vrij && !S.laden ? '' : 'disabled'}>${S.laden ? 'Laden...' : vrij ? 'Start (Enter)' : 'Nog niet vrijgespeeld'}</button>
-            <p class="dr-beste">Jouw beste: <b>${S.beste}</b> punten${me ? '' : ' &middot; <a href="#/login">Log in</a> om je score te bewaren'}</p>`;
+            <p class="dr-beste">Je beste score over alle kaarten: <b>${S.beste}</b> (daarmee speel je auto's vrij)${me ? '' : ' &middot; <a href="#/login">Log in</a> om je score te bewaren'}</p>`;
+        $('dr-kvorige').onclick = () => kiesKaart(S.kaartNr - 1);
+        $('dr-kvolgende').onclick = () => kiesKaart(S.kaartNr + 1);
         $('dr-vorige').onclick = () => kiesAuto(S.keuze - 1);
         $('dr-volgende').onclick = () => kiesAuto(S.keuze + 1);
         $('dr-start').onclick = startRit;
@@ -373,7 +519,7 @@ function driftBouw() {
         audioStart();
         opslag.set('mieters.drift.auto', CARS[S.keuze].id);
         zetSlot(S.auto, false);
-        S.a = DRIFT.nieuwAuto(CARS[S.keuze]); S.ronde = DRIFT.nieuweRonde(); S.aftel = 3.2; S.rest = 0; S.fase = 'aftellen';
+        S.a = DRIFT.nieuwAuto(CARS[S.keuze], S.kaart.start); S.ronde = DRIFT.nieuweRonde(); S.aftel = 3.2; S.rest = 0; S.fase = 'aftellen';
         S.camYaw = S.a.yaw; S.camPos.set(0, 0, 0); wisRem(); resetKegels();
         $('dr-hud').hidden = false; $('dr-touch').hidden = !S.touch; $('dr-ketting').textContent = ''; menu();
     }
@@ -384,19 +530,27 @@ function driftBouw() {
     }
     async function klaar() {
         S.fase = 'klaar';
-        const r = S.ronde, score = Math.floor(r.score), oud = S.beste;
-        S.beste = Math.max(S.beste, score); opslag.set(sleutelBest, String(S.beste));
-        const nieuw = CARS.filter(c => c.unlock > oud && c.unlock <= S.beste);
+        const r = S.ronde, score = Math.floor(r.score), kaart = S.kaart, oudKaart = S.besten[kaart.sleutel] || 0, oudAlles = S.beste;
+        S.besten[kaart.sleutel] = Math.max(oudKaart, score);
+        S.beste = Math.max(0, ...Object.values(S.besten));
+        opslag.set(sleutelBest(kaart.sleutel), String(S.besten[kaart.sleutel]));
+        const nieuw = CARS.filter(c => c.unlock > oudAlles && c.unlock <= S.beste);
         $('dr-hud').hidden = true; $('dr-touch').hidden = true; $('dr-ketting').textContent = '';
         const m = $('dr-menu'); m.hidden = false;
-        m.innerHTML = `<div class="dr-titel">Rit afgelopen!</div><div class="dr-groot">${score}</div><p>punten</p>
-            <p>${score > oud && score > 0 ? '&#127942; <b>Nieuw record!</b>' : 'Jouw beste: <b>' + S.beste + '</b>'}</p>
+        m.innerHTML = `<div class="dr-titel">Rit afgelopen! <small>${esc(kaart.naam)}</small></div><div class="dr-groot">${score}</div><p>punten</p>
+            <p>${score > oudKaart && score > 0 ? '&#127942; <b>Nieuw record op deze kaart!</b>' : 'Jouw beste op deze kaart: <b>' + S.besten[kaart.sleutel] + '</b>'}</p>
             <p class="dr-beste">Kegels omgereden: ${r.kegels} &middot; Langste drift: ${r.langste.toFixed(1)} s</p>
             ${nieuw.length ? `<p class="dr-unlock">&#128275; Vrijgespeeld: <b>${nieuw.map(c => esc(c.naam)).join(', ')}</b></p>` : ''}
-            ${me ? '' : '<p class="dr-beste"><a href="#/login">Log in</a> om je score in de Top 10 te zetten.</p>'}
+            ${me ? '<p class="dr-beste" id="dr-bewaard"></p>' : '<p class="dr-beste"><a href="#/login">Log in</a> om je score in de Top 10 te zetten.</p>'}
             <div class="dr-rij2"><button class="dr-start" id="dr-opnieuw">Opnieuw</button><button class="dr-start twee" id="dr-garage">Garage</button></div>`;
         $('dr-opnieuw').onclick = startRit; $('dr-garage').onclick = naarGarage;
-        if (me && score > 0) { try { await bewaarScore('drift', score); } catch (e) {} }
+        if (me && score > 0) {
+            let fout = null;
+            try { ({ error: fout } = await sb.rpc('bewaar_score', { p_game: kaart.sleutel, p_score: score })); } catch (e) { fout = e; }
+            const t = $('dr-bewaard');
+            if (t) t.textContent = fout ? 'Je score kon niet in de Top 10 worden gezet.' : 'Je score staat in de Top 10-lijst als hij hoog genoeg is.';
+            if (!fout) laadScores(kaart.sleutel);
+        }
     }
     function gebeurtenis(u) {
         if (u.t === 'bank') popup(`+${u.punten}${u.mult > 1 ? '  (x' + u.mult + ')' : ''}`, 'goed');
@@ -410,7 +564,7 @@ function driftBouw() {
             else if (Math.ceil(S.aftel) !== oud) popup(String(Math.ceil(S.aftel)), 'groot');
             return;
         }
-        const ev = DRIFT.stap(S.a, invoer(), dt, S.kegels); DRIFT.stapKegels(S.kegels, dt);
+        const ev = DRIFT.stap(S.a, invoer(), dt, S.kegels, S.kaart); DRIFT.stapKegels(S.kegels, dt);
         for (const u of DRIFT.tel(S.ronde, S.a, dt, ev)) gebeurtenis(u);
         if (ev.muur) S.shake = Math.max(S.shake, 0.6);
         if (S.ronde.tijd <= 0) klaar();
@@ -423,9 +577,9 @@ function driftBouw() {
         const auto = S.auto, a = S.a;
         if (S.fase === 'garage' || S.fase === 'klaar' || !a) {
             S.garageHoek += dt * 0.6;
-            if (auto) { auto.groep.position.set(0, 0, 0); auto.groep.rotation.y = S.garageHoek; auto.binnen.rotation.set(0, 0, 0); }
+            if (auto) { auto.groep.position.set(S.kaart.start.x, 0, S.kaart.start.z); auto.groep.rotation.y = S.garageHoek; auto.binnen.rotation.set(0, 0, 0); }
             camera.fov = 50; camera.updateProjectionMatrix();
-            camera.position.set(5.5, 2.6, -8); camera.lookAt(0, 0.8, 0);
+            camera.position.set(S.kaart.start.x + 5.5, 2.6, S.kaart.start.z - 8); camera.lookAt(S.kaart.start.x, 0.8, S.kaart.start.z);
         } else if (auto) {
             auto.groep.position.set(a.x, 0, a.z); auto.groep.rotation.y = a.yaw;
             auto.binnen.rotation.z = DRIFT.klem(a.yr * a.speed * 0.0035, -0.14, 0.14);
@@ -534,12 +688,17 @@ function driftBouw() {
 
     // ---------- starten ----------
     (async () => {
-        S.beste = Math.max(+opslag.get(sleutelBest) || 0, 0);
+        for (const k of KAARTEN) S.besten[k.sleutel] = Math.max(+opslag.get(sleutelBest(k.sleutel)) || 0, 0);
         if (me) {
-            const { data } = await sb.from('highscores').select('score').eq('game', 'drift').eq('user_id', me.id).maybeSingle();
-            if (data) S.beste = Math.max(S.beste, data.score);
-            opslag.set(sleutelBest, String(S.beste));
+            const { data } = await sb.from('highscores').select('game,score').eq('user_id', me.id).in('game', KAARTEN.map(k => k.sleutel));
+            (data || []).forEach(r => { S.besten[r.game] = Math.max(S.besten[r.game] || 0, r.score); opslag.set(sleutelBest(r.game), String(S.besten[r.game])); });
         }
+        S.beste = Math.max(0, ...Object.values(S.besten));
+        const kid = opslag.get('mieters.drift.kaart'), ki = KAARTEN.findIndex(k => k.id === kid);
+        S.kaartNr = ki >= 0 ? ki : 0;
+        S.kaart = kaartCache[S.kaartNr] = DRIFT.maakKaart(KAARTEN[S.kaartNr]);
+        bouwWereld(S.kaart);
+        if ($('scores')) laadScores(S.kaart.sleutel);
         const bewaard = opslag.get('mieters.drift.auto'), i = CARS.findIndex(c => c.id === bewaard);
         S.keuze = i >= 0 && open(i) ? i : 0;
         $('dr-laad').hidden = true;
@@ -549,4 +708,9 @@ function driftBouw() {
         S.raf = requestAnimationFrame(lus);
         CARS.forEach((c, n) => setTimeout(() => laadAuto(c.id), 600 + n * 400));       // de rest alvast op de achtergrond laden
     })();
+}
+
+function scoreTitel(sleutel) {
+    const k = DRIFT.KAARTEN.find(x => x.sleutel === sleutel);
+    return k ? 'Top 10 - ' + k.naam : 'Top 10';
 }
