@@ -285,3 +285,12 @@ canvas.snake { width: 100%; max-width: 510px; display: block; border-radius: 0 0
 .dr-kaartrij .dr-info p { margin: 1px 0 3px; font-size: 12px; }
 .dr-kaartrij small { font-size: 12px; opacity: .88; }
 .dr-titel small { font-size: .6em; opacity: .85; font-weight: 600; }
+.dr-boost { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); width: min(280px, 46%); height: 16px; background: rgba(0, 0, 0, .5); border-radius: 8px; overflow: hidden; z-index: 2; pointer-events: none; }
+.dr-boost i { display: block; height: 100%; width: 0; background: #4aa3ff; transition: width .08s linear; }
+.dr-boost.actief i { background: #ff8a1f; }
+.dr-boost span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; letter-spacing: .1em; }
+.dr-munten { font-size: .62em; background: rgba(0, 0, 0, .42); padding: 2px 10px; border-radius: 999px; margin-left: 8px; font-weight: 600; }
+.dr-koop { padding: 4px 12px; font-size: 13px; background: var(--accent); color: #13342c; border-radius: 8px; margin-left: 6px; }
+.dr-koop:disabled { opacity: .55; cursor: not-allowed; filter: none; }
+.dr-modus { font-size: 12px; opacity: .82; margin-left: 6px; }
+.dr-medailles { display: block; margin-top: 2px; }

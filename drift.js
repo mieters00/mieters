@@ -2,31 +2,32 @@
 const DRIFT = (() => {
     const RAND = 2.0;        // zo ver (m) van de rand botst het midden van de auto
     const RONDE = 90;        // seconden per rit
-    // unlock = het aantal punten dat je beste rit minstens moet hebben om deze auto te rijden
+    // prijs = munten die de auto kost, latG = hoeveel zijwaartse kracht de banden aankunnen voordat de auto gaat onderstuuren
     const CARS = [
-        { id: 'sedan', naam: 'Stadsauto', unlock: 0, maxSpeed: 25, accel: 10.5, grip: 7.0, hbGrip: 2.8, steer: 2.1, over: 0.24, tekst: 'Makkelijk te besturen. Hier begin je mee.' },
-        { id: 'hatchback-sports', naam: 'Sporthatchback', unlock: 400, maxSpeed: 27, accel: 12, grip: 6.8, hbGrip: 2.6, steer: 2.2, over: 0.28, tekst: 'Klein en wendbaar, glijdt snel weg.' },
-        { id: 'taxi', naam: 'Taxi', unlock: 900, maxSpeed: 26, accel: 11.5, grip: 6.6, hbGrip: 2.6, steer: 2.1, over: 0.3, tekst: 'Stabiel en voorspelbaar.' },
-        { id: 'sedan-sports', naam: 'Sportsedan', unlock: 1800, maxSpeed: 30, accel: 13.5, grip: 6.4, hbGrip: 2.4, steer: 2.2, over: 0.32, tekst: 'Snel, met een achterkant die graag uitbreekt.' },
-        { id: 'police', naam: 'Politieauto', unlock: 3000, maxSpeed: 31, accel: 14, grip: 6.3, hbGrip: 2.4, steer: 2.2, over: 0.34, tekst: 'Veel vermogen en een lange drift.' },
-        { id: 'suv', naam: 'SUV', unlock: 4500, maxSpeed: 28, accel: 12.5, grip: 6.0, hbGrip: 2.2, steer: 1.8, over: 0.36, tekst: 'Zwaar: draait traag, maar blijft lang glijden.' },
-        { id: 'firetruck', naam: 'Brandweerwagen', unlock: 6500, maxSpeed: 26, accel: 10, grip: 5.4, hbGrip: 2.0, steer: 1.6, over: 0.42, tekst: 'Groot, lomp en grappig om mee te slippen.' },
-        { id: 'race', naam: 'Racewagen', unlock: 9000, maxSpeed: 36, accel: 17, grip: 7.4, hbGrip: 2.4, steer: 2.4, over: 0.32, tekst: 'Heel snel en direct. Voor ervaren drifters.' },
-        { id: 'race-future', naam: 'Toekomstauto', unlock: 12000, maxSpeed: 40, accel: 20, grip: 7.0, hbGrip: 2.3, steer: 2.6, over: 0.42, tekst: 'De snelste van allemaal.' },
+        { id: 'sedan', naam: 'Stadsauto', prijs: 0, latG: 15, maxSpeed: 25, accel: 10.5, grip: 7.0, hbGrip: 2.8, steer: 2.1, over: 0.24, tekst: 'Makkelijk te besturen. Hier begin je mee.' },
+        { id: 'hatchback-sports', naam: 'Sporthatchback', prijs: 300, latG: 16, maxSpeed: 27, accel: 12, grip: 6.8, hbGrip: 2.6, steer: 2.2, over: 0.28, tekst: 'Klein en wendbaar, glijdt snel weg.' },
+        { id: 'taxi', naam: 'Taxi', prijs: 600, latG: 16, maxSpeed: 26, accel: 11.5, grip: 6.6, hbGrip: 2.6, steer: 2.1, over: 0.3, tekst: 'Stabiel en voorspelbaar.' },
+        { id: 'sedan-sports', naam: 'Sportsedan', prijs: 1000, latG: 18, maxSpeed: 30, accel: 13.5, grip: 6.4, hbGrip: 2.4, steer: 2.2, over: 0.32, tekst: 'Snel, met een achterkant die graag uitbreekt.' },
+        { id: 'police', naam: 'Politieauto', prijs: 1500, latG: 18, maxSpeed: 31, accel: 14, grip: 6.3, hbGrip: 2.4, steer: 2.2, over: 0.34, tekst: 'Veel vermogen en een lange drift.' },
+        { id: 'suv', naam: 'SUV', prijs: 2000, latG: 16, maxSpeed: 28, accel: 12.5, grip: 6.0, hbGrip: 2.2, steer: 1.8, over: 0.36, tekst: 'Zwaar: draait traag, maar blijft lang glijden.' },
+        { id: 'firetruck', naam: 'Brandweerwagen', prijs: 2600, latG: 13, maxSpeed: 26, accel: 10, grip: 5.4, hbGrip: 2.0, steer: 1.6, over: 0.42, tekst: 'Groot, lomp en grappig om mee te slippen.' },
+        { id: 'race', naam: 'Racewagen', prijs: 3500, latG: 22, maxSpeed: 36, accel: 17, grip: 7.4, hbGrip: 2.4, steer: 2.4, over: 0.32, tekst: 'Heel snel en direct. Voor ervaren drifters.' },
+        { id: 'race-future', naam: 'Toekomstauto', prijs: 5000, latG: 25, maxSpeed: 40, accel: 20, grip: 7.0, hbGrip: 2.3, steer: 2.6, over: 0.42, tekst: 'De snelste van allemaal.' },
     ];
     const klem = (v, a, b) => Math.max(a, Math.min(b, v));
 
     function nieuwAuto(c, start) {
-        return { c, x: start.x, z: start.z, yaw: start.yaw, vx: 0, vz: 0, yr: 0, steerV: 0, speed: 0, vf: 0, vl: 0, ang: 0, acc: 0 };
+        return { c, x: start.x, z: start.z, yaw: start.yaw, vx: 0, vz: 0, yr: 0, steerV: 0, speed: 0, vf: 0, vl: 0, ang: 0, acc: 0, lading: 0, boostT: 0, uitDrift: 0 };
     }
 
     const maakKegels = kaart => kaart.kegelPlekken.map(p => ({ x: p.x, z: p.z, vx: 0, vz: 0, omlaag: false, tilt: 0, richting: 0 }));
 
     // Eén tijdstapje. inp = { steer: -1..1 (links = +1), gas, brake, hand }
     function stap(a, inp, dt, kegels, kaart) {
-        const c = a.c, ev = { muur: 0, kegels: 0 };
+        const c = a.c, ev = { muur: 0, kegels: 0, boost: 0 };
         a.steerV += (inp.steer - a.steerV) * Math.min(1, 9 * dt);
-        const hb = inp.hand ? 1 : 0, gas = inp.gas ? 1 : 0;
+        const boost = a.boostT > 0, hb = inp.hand ? 1 : 0, gas = (inp.gas || boost) ? 1 : 0;
+        const maxS = c.maxSpeed * (boost ? 1.35 : 1), acc = c.accel * (boost ? 2.2 : 1);
         const v0 = Math.hypot(a.vx, a.vz);
         const vf0 = a.vx * Math.sin(a.yaw) + a.vz * Math.cos(a.yaw);
 
@@ -34,6 +35,8 @@ const DRIFT = (() => {
         let doel = a.steerV * c.steer * klem(v0 / 4, 0, 1) / (1 + v0 / 45);
         if (vf0 < -0.5) doel = -doel;
         if (hb) doel *= 1.15;
+        const yrMax = (c.latG / Math.max(v0, 3)) * (hb ? 1.7 : 1 + 2.4 * c.over * gas * Math.abs(a.steerV));
+        doel = klem(doel, -yrMax, yrMax);
         a.yr += (doel - a.yr) * Math.min(1, (hb ? 5 : 8) * dt);
         a.yaw += a.yr * dt;
 
@@ -42,7 +45,7 @@ const DRIFT = (() => {
         let vf = a.vx * fx + a.vz * fz, vl = a.vx * lx + a.vz * lz;
         const vfVoor = vf;
 
-        if (gas) vf += c.accel * (1 - klem(vf / c.maxSpeed, 0, 1)) * dt;
+        if (gas) vf += acc * (1 - klem(vf / maxS, 0, 1)) * dt;
         if (inp.brake) {
             if (vf > 0.5) vf = Math.max(0, vf - c.accel * 1.4 * dt);
             else vf -= c.accel * 0.45 * dt * (1 - klem(-vf / (c.maxSpeed * 0.3), 0, 1));
@@ -91,6 +94,13 @@ const DRIFT = (() => {
         a.speed = Math.hypot(a.vx, a.vz);
         a.ang = a.vf > 0.5 ? Math.atan2(Math.abs(a.vl), a.vf) : 0;
         a.acc += ((a.vf - vfVoor) / dt - a.acc) * Math.min(1, 6 * dt);
+        // drift-boost: tijdens een drift laad je op, als de drift stopt krijg je een zetje
+        if (a.boostT > 0) a.boostT = Math.max(0, a.boostT - dt);
+        if (a.speed > 7 && a.vf > 2 && a.ang > 0.26 && a.ang < 1.48) { a.lading = Math.min(1, a.lading + dt * 0.45); a.uitDrift = 0; }
+        else {
+            a.uitDrift += dt;
+            if (a.uitDrift > 0.2) { if (a.lading >= 0.25) { a.boostT = 0.5 + a.lading * 1.6; ev.boost = a.boostT; } a.lading = 0; }
+        }
         return ev;
     }
     function stapKegels(kegels, dt) {
@@ -102,7 +112,7 @@ const DRIFT = (() => {
     }
 
     // ---------- punten ----------
-    function nieuweRonde() { return { tijd: RONDE, score: 0, ketting: 0, kettingTijd: 0, genade: 0, mult: 1, kegels: 0, langste: 0 }; }
+    function nieuweRonde(tijd = RONDE) { return { tijd, score: 0, ketting: 0, kettingTijd: 0, genade: 0, mult: 1, kegels: 0, langste: 0 }; }
     // geeft een lijst gebeurtenissen terug: { t: 'bank' | 'verloren', punten }
     function tel(r, a, dt, ev) {
         const uit = [];
@@ -127,10 +137,11 @@ const DRIFT = (() => {
     // ---------- kaarten ----------
     // sleutel = de naam waaronder de scores in de database staan (elke kaart heeft zijn eigen Top 10)
     const KAARTEN = [
-        { id: 'veld', naam: 'Parkeerplaats', sleutel: 'drift', type: 'cirkel', R: 70, tekst: 'Groot rond veld met twee ringen kegels. Hier begin je.' },
-        { id: 'industrie', naam: 'Industrieterrein', sleutel: 'drift-industrie', type: 'rechthoek', hx: 85, hz: 55, r: 28, tekst: 'Rechthoekig terrein met olietanks om omheen te driften en kegels om te slalommen.' },
-        { id: 'circuit', naam: 'Circuit', sleutel: 'drift-circuit', type: 'baan', breedte: 26, R: 76, harm: [[2, 0.26, 0], [3, 0.09, 1.0]], tekst: 'Een echt circuit met lange, ruime bochten.' },
-        { id: 'berg', naam: 'Bergweg', sleutel: 'drift-berg', type: 'baan', breedte: 18, R: 70, harm: [[3, 0.2, 0.3], [4, 0.1, 1.1]], tekst: 'Smalle weg met scherpe bochten. Hier moet je goed sturen.' },
+        { id: 'veld', naam: 'Parkeerplaats', sleutel: 'drift', modus: 'drift', type: 'cirkel', R: 70, tekst: 'Vrij driften op een groot rond veld met kegels. Punten voor lange, schuine drifts.' },
+        { id: 'industrie', naam: 'Industrieterrein', sleutel: 'drift-industrie', modus: 'drift', type: 'rechthoek', hx: 85, hz: 55, r: 28, tekst: 'Vrij driften tussen olietanks en kegels. Punten voor lange, schuine drifts.' },
+        { id: 'stad', naam: 'Stadscircuit', sleutel: 'stad', modus: 'race', ronden: 3, medailles: [95000, 115000, 140000], type: 'baan', breedte: 20, punten: [[-100, -70], [-20, -70], [60, -70], [100, -62], [122, -35], [122, 5], [105, 35], [75, 48], [40, 45], [20, 25], [0, 10], [-25, 18], [-45, 40], [-70, 62], [-105, 60], [-130, 35], [-135, -10], [-125, -45]], tekst: 'Race 3 ronden: een lange rechte start, ruime bochten en een slinger in het midden.' },
+        { id: 'berg', naam: 'Bergcircuit', sleutel: 'berg', modus: 'race', ronden: 3, medailles: [100000, 120000, 145000], type: 'baan', breedte: 16, punten: [[-90, -50], [-30, -55], [30, -45], [74, -18], [100, 14], [108, 46], [84, 72], [44, 66], [18, 46], [0, 18], [-20, -6], [-46, 8], [-66, 36], [-92, 66], [-126, 52], [-134, 10], [-114, -22], [-98, -40]], tekst: 'Race 3 ronden: smal en kronkelig met scherpe haarspeldbochten. Met drift houd je snelheid.' },
+        { id: 'speedway', naam: 'Speedway', sleutel: 'speedway', modus: 'race', ronden: 3, medailles: [95000, 115000, 140000], type: 'baan', breedte: 24, punten: (() => { const p = []; for (let i = 0; i < 18; i++) { const t = (i / 18) * 2 * Math.PI; let z = 70 * Math.sin(t); if (i === 5) z += 12; if (i === 6) z -= 12; if (i === 7) z += 4.8; p.push([150 * Math.cos(t), z]); } return p; })(), tekst: 'Race 3 ronden: een supersnel ovaal met een chicane. Hier haal je de hoogste snelheid.' },
     ];
     // zet een gesloten lijn om in punten met gelijke onderlinge afstand, plus de rijrichting (tx, tz)
     function herbemonster(p, afstand) {
@@ -147,6 +158,13 @@ const DRIFT = (() => {
         for (let i = 0; i < m; i++) { const a = uit[i], b = uit[(i + 1) % m], l = Math.hypot(b.x - a.x, b.z - a.z) || 1; a.tx = (b.x - a.x) / l; a.tz = (b.z - a.z) / l; }
         return uit;
     }
+    // gladde gesloten lijn door controlepunten (Catmull-Rom)
+    function spline(pts, per = 16) {
+        const n = pts.length, uit = [];
+        const cr = (p0, p1, p2, p3, t) => { const t2 = t * t, t3 = t2 * t; return ['x', 'z'].map(k => 0.5 * ((2 * p1[k]) + (-p0[k] + p2[k]) * t + (2 * p0[k] - 5 * p1[k] + 4 * p2[k] - p3[k]) * t2 + (-p0[k] + 3 * p1[k] - 3 * p2[k] + p3[k]) * t3)); };
+        for (let i = 0; i < n; i++) for (let j = 0; j < per; j++) { const q = cr(pts[(i - 1 + n) % n], pts[i], pts[(i + 1) % n], pts[(i + 2) % n], j / per); uit.push({ x: q[0], z: q[1] }); }
+        return uit;
+    }
     function afgerondeRechthoek(hx, hz, r, stappen = 14) {
         const p = [];
         [[hx - r, hz - r, 0], [-(hx - r), hz - r, 90], [-(hx - r), -(hz - r), 180], [hx - r, -(hz - r), 270]].forEach(([cx, cz, g0]) => {
@@ -155,7 +173,7 @@ const DRIFT = (() => {
         return p;
     }
     function maakKaart(def) {
-        const k = { def, id: def.id, naam: def.naam, sleutel: def.sleutel, tekst: def.tekst, type: def.type, obstakels: [], kegelPlekken: [], muren: [], omtrek: null, midden: null, breedte: def.breedte || 0, straal: 0, start: { x: 0, z: 0, yaw: 0 } };
+        const k = { def, id: def.id, modus: def.modus, naam: def.naam, sleutel: def.sleutel, tekst: def.tekst, type: def.type, obstakels: [], kegelPlekken: [], muren: [], omtrek: null, midden: null, breedte: def.breedte || 0, straal: 0, start: { x: 0, z: 0, yaw: 0 } };
         const res = { d: 0, nx: 1, nz: 0 };
         const ring = (n, r, off, cx = 0, cz = 0) => { for (let i = 0; i < n; i++) { const t = off + (i / n) * Math.PI * 2; k.kegelPlekken.push({ x: cx + Math.cos(t) * r, z: cz + Math.sin(t) * r }); } };
         if (def.type === 'cirkel') {
@@ -182,9 +200,7 @@ const DRIFT = (() => {
             ring(10, 17, 0.2);
             k.kegelPlekken = k.kegelPlekken.filter(p => k.grens(p.x, p.z).d < -6 && k.obstakels.every(o => Math.hypot(p.x - o.x, p.z - o.z) > o.r + 3) && Math.hypot(p.x - k.start.x, p.z - k.start.z) > 8);
         } else {
-            const N = 1440, ruw = [];
-            for (let i = 0; i < N; i++) { const t = (i / N) * Math.PI * 2; let f = 1; for (const [m, a, ph] of def.harm) f += a * Math.cos(m * t + ph); ruw.push({ x: Math.cos(t) * def.R * f, z: Math.sin(t) * def.R * f }); }
-            const mid = herbemonster(ruw, 3), n = mid.length, h = def.breedte / 2;
+            const mid = herbemonster(spline(def.punten.map(([x, z]) => ({ x, z }))), 3), n = mid.length, h = def.breedte / 2;
             k.midden = mid;
             k.grens = (x, z) => {
                 let beste = 1e18, qx = 0, qz = 0, bi = 0;
@@ -205,7 +221,7 @@ const DRIFT = (() => {
             // kegels aan de binnenkant van de scherpste bochten
             const kr = mid.map((_, i) => { const a = mid[(i - 4 + n) % n], b = mid[(i + 4) % n]; return Math.abs(Math.atan2(a.tx * b.tz - a.tz * b.tx, a.tx * b.tx + a.tz * b.tz)); });
             const top = Math.max(...kr);
-            for (let i = 0; i < n; i++) {
+            for (let i = 0; i < n && def.modus !== 'race'; i++) {
                 let piek = kr[i] > top * 0.55;
                 for (let d = -10; d <= 10 && piek; d++) if (kr[(i + d + n) % n] > kr[i]) piek = false;
                 if (!piek || Math.min(i, n - i) < 14) continue;
@@ -215,7 +231,25 @@ const DRIFT = (() => {
         }
         return k;
     }
-    return { RAND, RONDE, CARS, KAARTEN, maakKaart, herbemonster, nieuwAuto, maakKegels, stap, stapKegels, nieuweRonde, tel, klem };
+    // ---------- race ----------
+    function nieuweRace(kaart) { return { n: kaart.midden.length, ronden: kaart.def.ronden || 3, idx: 0, vg: 0, tijd: 0, rondeStart: 0, rondes: [], klaar: false }; }
+    // volgt waar de auto op de baan is (de baan is gesloten door de muren, dus afsnijden kan niet) en telt de ronden
+    function raceStap(r, a, kaart, dt) {
+        const mid = kaart.midden, n = r.n, uit = [];
+        r.tijd += dt;
+        let bi = r.idx, bd = 1e18;
+        for (let o = -8; o <= 14; o++) { const i = (r.idx + o + n) % n, dx = mid[i].x - a.x, dz = mid[i].z - a.z, d = dx * dx + dz * dz; if (d < bd) { bd = d; bi = i; } }
+        let st = bi - r.idx; if (st > n / 2) st -= n; if (st < -n / 2) st += n;
+        r.vg += st; r.idx = bi;
+        const voltooid = Math.floor(r.vg / n);
+        if (voltooid > r.rondes.length && voltooid <= r.ronden) {
+            const t = r.tijd - r.rondeStart; r.rondes.push(t); r.rondeStart = r.tijd;
+            uit.push({ t: 'ronde', nr: voltooid, tijd: t });
+            if (voltooid >= r.ronden) { r.klaar = true; uit.push({ t: 'finish', tijd: r.tijd }); }
+        }
+        return uit;
+    }
+    return { RAND, RONDE, CARS, KAARTEN, spline, nieuweRace, raceStap, maakKaart, herbemonster, nieuwAuto, maakKegels, stap, stapKegels, nieuweRonde, tel, klem };
 })();
 
 // ---------- Drift (3D): scherm ----------
@@ -246,11 +280,12 @@ async function drift() {
         <div class="dr-scherm" id="dr-scherm"><canvas id="dr-canvas"></canvas>
             <div class="dr-laad" id="dr-laad">Drift wordt geladen...</div>
             <div class="dr-hud" id="dr-hud" hidden>
-                <div class="dr-blok"><small>Punten</small><b id="dr-punten">0</b></div>
+                <div class="dr-blok"><small id="dr-l1">Punten</small><b id="dr-punten">0</b></div>
                 <div class="dr-blok"><small>Tijd</small><b id="dr-tijd">90</b></div>
                 <div class="dr-blok"><small>Snelheid</small><b id="dr-kmh">0</b></div>
             </div>
             <div class="dr-ketting" id="dr-ketting"></div>
+            <div class="dr-boost" id="dr-boost" hidden><i id="dr-boostbalk"></i><span>BOOST</span></div>
             <div class="dr-popup" id="dr-popup"></div>
             <div class="dr-menu" id="dr-menu" hidden></div>
             <div class="dr-hoek"><button class="dr-mini" id="dr-geluid" title="Geluid">&#128266;</button><button class="dr-mini" id="dr-vol" title="Volledig scherm">&#9974;</button></div>
@@ -260,7 +295,7 @@ async function drift() {
                 <button class="dr-mini dr-autogas" id="dr-autogas">Auto-gas: aan</button>
             </div>
         </div>
-        <p class="intro dr-uitleg">Pijltjes of W, A, S en D: sturen en gas &middot; <b>Spatie: handrem (zo drift je!)</b> &middot; Esc: terug naar de garage. Je hebt 90 seconden: hoe langer en hoe harder je driftt, hoe meer punten. Een botsing tegen de muur kost je de punten van je drift. Auto's: Kenney.nl (CC0).</p></div>`;
+        <p class="intro dr-uitleg">Pijltjes of W, A, S en D: sturen en gas &middot; <b>Spatie: handrem</b> &middot; Esc: terug naar de garage. <b>Drift om je boost op te laden:</b> laat je de drift los, dan krijg je een zetje. Rij je een race, dan telt je snelste tijd. Met elke rit verdien je munten, en daarmee koop je nieuwe auto's. Auto's: Kenney.nl (CC0).</p></div>`;
     try { await driftLaadThree(); } catch (e) { if ($('dr-laad')) $('dr-laad').textContent = 'Het 3D-spel kon niet worden geladen. Controleer je internet en probeer het opnieuw.'; return; }
     if (!$('dr-canvas')) return;                    // je was al weggegaan
     driftBouw();
@@ -318,6 +353,12 @@ function driftBouw() {
             const witM = new THREE.MeshBasicMaterial({ color: kleur(0xffffff), side: THREE.DoubleSide });
             lint(k.midden, k.breedte / 2 - 1, 0.18, 0.03, witM); lint(k.midden, -(k.breedte / 2 - 1), 0.18, 0.03, witM);
             startlijn(k.midden[0].x, k.midden[0].z, k.midden[0].tx, k.midden[0].tz, k.breedte);
+            if (k.def.modus === 'race') {      // start- en finishpoort
+                const p0 = k.midden[0], nx = p0.tz, nz = -p0.tx, yaw = Math.atan2(p0.tx, p0.tz), rand = k.breedte / 2 + 1.2;
+                for (const z of [-1, 1]) { const paal = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 7, 10), lam(0xd8342c)); paal.position.set(p0.x + nx * rand * z, 3.5, p0.z + nz * rand * z); wereld.add(paal); }
+                const balk = new THREE.Mesh(new THREE.BoxGeometry(k.breedte + 3, 1.1, 0.7), lam(0xffffff)); balk.position.set(p0.x, 7, p0.z); balk.rotation.y = yaw; wereld.add(balk);
+                const band = new THREE.Mesh(new THREE.BoxGeometry(k.breedte + 3.02, 0.35, 0.72), lam(0x111111)); band.position.set(p0.x, 7, p0.z); band.rotation.y = yaw; wereld.add(band);
+            }
         } else {
             plat(new THREE.ShapeGeometry(new THREE.Shape(k.omtrek.map(p => new THREE.Vector2(p.x, -p.z)))), lam(k.type === 'rechthoek' ? 0x5b5f64 : 0x3c4046), 0);
             if (k.type === 'cirkel') {
@@ -412,14 +453,15 @@ function driftBouw() {
 
     // ---------- spelstaat ----------
     const S = {
-        fase: 'garage', keuze: 0, kaartNr: 0, kaart: null, besten: {}, beste: 0, auto: null, a: null, ronde: null, kegels: [], kegelObj: [], rest: 0, aftel: 0, vorige: 0, raf: 0, laadNr: 0,
+        fase: 'garage', keuze: 0, kaartNr: 0, kaart: null, besten: {}, tijden: {}, autos: ['sedan'], munten: 0, serverOk: false, status: '', modus: 'drift', race: null, auto: null, a: null, ronde: null, kegels: [], kegelObj: [], rest: 0, aftel: 0, vorige: 0, raf: 0, laadNr: 0,
         camYaw: Math.PI / 2, camPos: new THREE.Vector3(), garageHoek: 0.6, shake: 0, remT: 0, rookT: 0, stil: opslag.get('mieters.drift.stil') === '1',
         autoGas: ('ontouchstart' in window) || (window.matchMedia && matchMedia('(pointer: coarse)').matches), touch: false, laden: false, audio: null, popT: 0, laatsteTekst: {},
     };
     S.touch = S.autoGas;
     const knop = { L: false, R: false, gas: false, rem: false, hand: false };
     const invoer = () => ({ steer: (knop.L ? 1 : 0) - (knop.R ? 1 : 0), gas: knop.gas || (S.autoGas && S.fase === 'rijden'), brake: knop.rem, hand: knop.hand });
-    const open = i => CARS[i].unlock <= S.beste;
+    const eigen = i => S.autos.includes(CARS[i].id);
+    const fmt = t => { const m = Math.floor(t / 60), x = t - m * 60; return m + ':' + (x < 10 ? '0' : '') + x.toFixed(2); };
     const tekst = (id, t) => { const e = $(id); if (e && S.laatsteTekst[id] !== t) { S.laatsteTekst[id] = t; e.textContent = t; } };
     const popup = (t, klas) => { const e = $('dr-popup'); if (!e) return; e.textContent = t; e.className = 'dr-popup ' + (klas || ''); void e.offsetWidth; e.classList.add('toon'); };
 
@@ -432,14 +474,26 @@ function driftBouw() {
         for (const k of S.kegels) { const o = sjabloon.clone(true); o.rotation.order = 'YXZ'; o.position.set(k.x, 0, k.z); scene.add(o); S.kegelObj.push(o); }
     };
 
+    // ---------- Top 10 ----------
+    async function laadTijden(k) {
+        const el = $('scores'); if (!el) return;
+        const { data } = await sb.from('race_tijden').select('tijd_ms,ronde_ms,profiles(username,avatar)').eq('baan', k.sleutel).order('tijd_ms', { ascending: true }).limit(10);
+        if (!$('scores')) return;
+        el.innerHTML = `<h3>Top 10 - ${esc(k.naam)}</h3>` + ((data || []).length
+            ? data.map((r, i) => `<div class="score-rij">${avatar(r.profiles || {}, 22)}<span>${i + 1}. ${esc(r.profiles && r.profiles.username)}</span><span class="punten">${fmt(r.tijd_ms / 1000)}</span></div>`).join('')
+            : '<p class="leeg">Nog geen tijden. Wees de eerste!</p>');
+    }
+    const laadLijst = () => { const k = S.kaart; if (!k) return; if (k.modus === 'race') laadTijden(k); else if ($('scores')) laadScores(k.sleutel); };
+
     // ---------- kaart kiezen ----------
     const kaartCache = [];
     async function kiesKaart(i) {
         S.kaartNr = ((i % KAARTEN.length) + KAARTEN.length) % KAARTEN.length;
         S.kaart = kaartCache[S.kaartNr] || (kaartCache[S.kaartNr] = DRIFT.maakKaart(KAARTEN[S.kaartNr]));
         opslag.set('mieters.drift.kaart', S.kaart.id);
+        S.modus = S.kaart.modus;
         bouwWereld(S.kaart); wisRem();
-        if ($('scores')) laadScores(S.kaart.sleutel);
+        laadLijst();
         menu();
         await resetKegels();
     }
@@ -451,34 +505,49 @@ function driftBouw() {
         const auto = await laadAuto(CARS[S.keuze].id);
         if (mijn !== S.laadNr || !$('dr-canvas')) return;
         if (S.auto) scene.remove(S.auto.groep);
-        S.auto = auto; zetSlot(auto, !open(S.keuze)); scene.add(auto.groep);
+        S.auto = auto; zetSlot(auto, !eigen(S.keuze)); scene.add(auto.groep);
         S.laden = false; menu();
     }
     function balk(label, w) { return `<div class="dr-stat"><span>${label}</span><i><u style="width:${Math.round(DRIFT.klem(w, 0.05, 1) * 100)}%"></u></i></div>`; }
+    async function koop() {
+        const c = CARS[S.keuze];
+        let uit = null;
+        try { uit = await sb.rpc('koop_auto', { p_auto: c.id }); } catch (e) { uit = { error: e }; }
+        if (!uit || uit.error || !uit.data) { S.status = 'Kopen is niet gelukt.'; menu(); return; }
+        S.munten = uit.data.munten; S.autos = uit.data.autos; S.status = 'Gekocht: ' + c.naam + '!';
+        if (S.auto) zetSlot(S.auto, false);
+        menu();
+    }
     function menu() {
         const m = $('dr-menu'); if (!m) return;
         if (S.fase !== 'garage' && S.fase !== 'klaar') { m.hidden = true; return; }
         m.hidden = false;
         if (S.fase === 'klaar') return;           // het resultaatscherm vult het menu zelf
-        const c = CARS[S.keuze], vrij = open(S.keuze);
-        const kk = S.kaart, kb = S.besten[kk.sleutel] || 0;
-        m.innerHTML = `<div class="dr-titel">Kies je auto en kaart</div>
+        const c = CARS[S.keuze], mijn = eigen(S.keuze), kk = S.kaart, race = kk.modus === 'race';
+        const t = S.tijden[kk.sleutel], kb = S.besten[kk.sleutel] || 0;
+        const kopen = mijn ? '' : (me && S.serverOk
+            ? `<button class="dr-koop" id="dr-koop" ${S.munten >= c.prijs ? '' : 'disabled'}>${S.munten >= c.prijs ? 'Koop voor ' + c.prijs + ' munten' : 'Nog ' + (c.prijs - S.munten) + ' munten nodig'}</button>`
+            : `<span class="dr-slot">&#128274; ${c.prijs} munten</span>`);
+        const medailles = race ? `<small class="dr-medailles">&#129351; ${fmt(kk.def.medailles[0] / 1000)} &middot; &#129352; ${fmt(kk.def.medailles[1] / 1000)} &middot; &#129353; ${fmt(kk.def.medailles[2] / 1000)}</small>` : '';
+        const beste = race ? (t ? `Jouw beste tijd: <b>${fmt(t.tijd_ms / 1000)}</b>` : 'Nog geen tijd gezet') : `Jouw beste op deze kaart: <b>${kb}</b> punten`;
+        m.innerHTML = `<div class="dr-titel">Garage <span class="dr-munten">&#128176; ${S.munten} munten</span></div>
             <div class="dr-rij"><button class="dr-pijl" id="dr-vorige">&#9664;</button>
-              <div class="dr-info"><b>${esc(c.naam)}</b> ${vrij ? '' : '<span class="dr-slot">&#128274; vanaf ' + c.unlock + ' punten</span>'}
+              <div class="dr-info"><b>${esc(c.naam)}</b> ${kopen}
                 <p>${esc(c.tekst)}</p>
-                ${balk('Snelheid', c.maxSpeed / 40)}${balk('Optrekken', c.accel / 20)}${balk('Driftgemak', (8.2 - c.grip) / 3.2)}</div>
+                ${balk('Snelheid', c.maxSpeed / 40)}${balk('Optrekken', c.accel / 20)}${balk('Grip', c.latG / 30)}</div>
               <button class="dr-pijl" id="dr-volgende">&#9654;</button></div>
-            <div class="dr-lijst">${CARS.map((x, i) => `<button class="dr-chip ${i === S.keuze ? 'actief' : ''} ${open(i) ? '' : 'slot'}" data-i="${i}">${open(i) ? '' : '&#128274; '}${esc(x.naam)}</button>`).join('')}</div>
+            <div class="dr-lijst">${CARS.map((x, i) => `<button class="dr-chip ${i === S.keuze ? 'actief' : ''} ${eigen(i) ? '' : 'slot'}" data-i="${i}">${eigen(i) ? '' : '&#128274; '}${esc(x.naam)}</button>`).join('')}</div>
             <div class="dr-rij dr-kaartrij"><button class="dr-pijl klein" id="dr-kvorige">&#9664;</button>
-              <div class="dr-info"><b>Kaart ${S.kaartNr + 1} van ${KAARTEN.length}: ${esc(kk.naam)}</b><p>${esc(kk.tekst)}</p><small>Jouw beste op deze kaart: <b>${kb}</b></small></div>
+              <div class="dr-info"><b>${esc(kk.naam)}</b> <span class="dr-modus">${race ? 'Race, ' + kk.def.ronden + ' ronden' : 'Vrij driften, 90 seconden'}</span><p>${esc(kk.tekst)}</p><small>${beste}</small> ${medailles}</div>
               <button class="dr-pijl klein" id="dr-kvolgende">&#9654;</button></div>
-            <button class="dr-start" id="dr-start" ${vrij && !S.laden ? '' : 'disabled'}>${S.laden ? 'Laden...' : vrij ? 'Start (Enter)' : 'Nog niet vrijgespeeld'}</button>
-            <p class="dr-beste">Je beste score over alle kaarten: <b>${S.beste}</b> (daarmee speel je auto's vrij)${me ? '' : ' &middot; <a href="#/login">Log in</a> om je score te bewaren'}</p>`;
+            <button class="dr-start" id="dr-start" ${mijn && !S.laden ? '' : 'disabled'}>${S.laden ? 'Laden...' : mijn ? 'Start (Enter)' : 'Koop deze auto om te rijden'}</button>
+            ${S.status ? `<p class="dr-beste">${esc(S.status)}</p>` : ''}`;
         $('dr-kvorige').onclick = () => kiesKaart(S.kaartNr - 1);
         $('dr-kvolgende').onclick = () => kiesKaart(S.kaartNr + 1);
         $('dr-vorige').onclick = () => kiesAuto(S.keuze - 1);
         $('dr-volgende').onclick = () => kiesAuto(S.keuze + 1);
         $('dr-start').onclick = startRit;
+        if ($('dr-koop')) $('dr-koop').onclick = koop;
         m.querySelectorAll('.dr-chip').forEach(b => b.onclick = () => kiesAuto(+b.dataset.i));
     }
 
@@ -515,44 +584,73 @@ function driftBouw() {
 
     // ---------- een rit ----------
     function startRit() {
-        if (!open(S.keuze) || S.laden || !S.auto) return;
+        if (!eigen(S.keuze) || S.laden || !S.auto) return;
         audioStart();
         opslag.set('mieters.drift.auto', CARS[S.keuze].id);
         zetSlot(S.auto, false);
-        S.a = DRIFT.nieuwAuto(CARS[S.keuze], S.kaart.start); S.ronde = DRIFT.nieuweRonde(); S.aftel = 3.2; S.rest = 0; S.fase = 'aftellen';
+        S.modus = S.kaart.modus; const race = S.modus === 'race';
+        S.a = DRIFT.nieuwAuto(CARS[S.keuze], S.kaart.start); S.ronde = DRIFT.nieuweRonde(race ? 99999 : undefined);
+        S.race = race ? DRIFT.nieuweRace(S.kaart) : null;
+        S.aftel = 3.2; S.rest = 0; S.fase = 'aftellen';
         S.camYaw = S.a.yaw; S.camPos.set(0, 0, 0); wisRem(); resetKegels();
-        $('dr-hud').hidden = false; $('dr-touch').hidden = !S.touch; $('dr-ketting').textContent = ''; menu();
+        tekst('dr-l1', race ? 'Ronde' : 'Punten');
+        $('dr-hud').hidden = false; $('dr-boost').hidden = false; $('dr-touch').hidden = !S.touch; $('dr-ketting').textContent = ''; menu();
     }
     function naarGarage() {
         S.fase = 'garage'; knop.L = knop.R = knop.gas = knop.rem = knop.hand = false;
-        $('dr-hud').hidden = true; $('dr-touch').hidden = true; $('dr-ketting').textContent = ''; $('dr-popup').className = 'dr-popup';
+        $('dr-hud').hidden = true; $('dr-boost').hidden = true; $('dr-touch').hidden = true; $('dr-ketting').textContent = ''; $('dr-popup').className = 'dr-popup';
         audioUpdate(0); kiesAuto(S.keuze);
     }
+    const knoppenUit = () => { $('dr-hud').hidden = true; $('dr-boost').hidden = true; $('dr-touch').hidden = true; $('dr-ketting').textContent = ''; };
+    // rit op een driftveld afgelopen
     async function klaar() {
         S.fase = 'klaar';
-        const r = S.ronde, score = Math.floor(r.score), kaart = S.kaart, oudKaart = S.besten[kaart.sleutel] || 0, oudAlles = S.beste;
+        const r = S.ronde, score = Math.floor(r.score), kaart = S.kaart, oudKaart = S.besten[kaart.sleutel] || 0;
         S.besten[kaart.sleutel] = Math.max(oudKaart, score);
-        S.beste = Math.max(0, ...Object.values(S.besten));
         opslag.set(sleutelBest(kaart.sleutel), String(S.besten[kaart.sleutel]));
-        const nieuw = CARS.filter(c => c.unlock > oudAlles && c.unlock <= S.beste);
-        $('dr-hud').hidden = true; $('dr-touch').hidden = true; $('dr-ketting').textContent = '';
+        knoppenUit();
         const m = $('dr-menu'); m.hidden = false;
         m.innerHTML = `<div class="dr-titel">Rit afgelopen! <small>${esc(kaart.naam)}</small></div><div class="dr-groot">${score}</div><p>punten</p>
             <p>${score > oudKaart && score > 0 ? '&#127942; <b>Nieuw record op deze kaart!</b>' : 'Jouw beste op deze kaart: <b>' + S.besten[kaart.sleutel] + '</b>'}</p>
             <p class="dr-beste">Kegels omgereden: ${r.kegels} &middot; Langste drift: ${r.langste.toFixed(1)} s</p>
-            ${nieuw.length ? `<p class="dr-unlock">&#128275; Vrijgespeeld: <b>${nieuw.map(c => esc(c.naam)).join(', ')}</b></p>` : ''}
-            ${me ? '<p class="dr-beste" id="dr-bewaard"></p>' : '<p class="dr-beste"><a href="#/login">Log in</a> om je score in de Top 10 te zetten.</p>'}
+            <p class="dr-beste" id="dr-bewaard">${me ? (score > 0 ? 'Bezig met opslaan...' : '') : 'Log in om punten, munten en een plek in de Top 10 te krijgen.'}</p>
             <div class="dr-rij2"><button class="dr-start" id="dr-opnieuw">Opnieuw</button><button class="dr-start twee" id="dr-garage">Garage</button></div>`;
         $('dr-opnieuw').onclick = startRit; $('dr-garage').onclick = naarGarage;
         if (me && score > 0) {
-            let fout = null;
+            let fout = null, bel = null;
             try { ({ error: fout } = await sb.rpc('bewaar_score', { p_game: kaart.sleutel, p_score: score })); } catch (e) { fout = e; }
+            try { const r2 = await sb.rpc('drift_beloning', { p_kaart: kaart.sleutel, p_score: score }); if (!r2.error) bel = r2.data; } catch (e) {}
+            if (bel) S.munten = bel.munten;
             const t = $('dr-bewaard');
-            if (t) t.textContent = fout ? 'Je score kon niet in de Top 10 worden gezet.' : 'Je score staat in de Top 10-lijst als hij hoog genoeg is.';
-            if (!fout) laadScores(kaart.sleutel);
+            if (t) t.innerHTML = (bel ? `&#128176; <b>+${bel.erbij} munten</b> (je hebt er nu ${bel.munten}). ` : '') + (fout ? 'Je score kon niet in de Top 10 worden gezet.' : '');
+            if (!fout) laadLijst();
         }
     }
+    // race afgelopen
+    async function klaarRace() {
+        S.fase = 'klaar';
+        const race = S.race, kaart = S.kaart, tijd = race.tijd, beste = Math.min(...race.rondes), drift = Math.min(60000, Math.floor(S.ronde.score + S.ronde.ketting));
+        knoppenUit();
+        const m = $('dr-menu'); m.hidden = false;
+        m.innerHTML = `<div class="dr-titel">Race afgelopen! <small>${esc(kaart.naam)}</small></div><div class="dr-groot">${fmt(tijd)}</div>
+            <p class="dr-beste">Rondes: ${race.rondes.map(fmt).join(' &middot; ')} (snelste ${fmt(beste)}) &middot; Driftpunten: ${drift}</p>
+            <p class="dr-beste" id="dr-bewaard">${me ? 'Bezig met opslaan...' : 'Log in om je tijd te bewaren en munten te verdienen.'}</p>
+            <div class="dr-rij2"><button class="dr-start" id="dr-opnieuw">Opnieuw</button><button class="dr-start twee" id="dr-garage">Garage</button></div>`;
+        $('dr-opnieuw').onclick = startRit; $('dr-garage').onclick = naarGarage;
+        if (!me) return;
+        let uit = null;
+        try { uit = await sb.rpc('race_afronden', { p_baan: kaart.sleutel, p_tijd_ms: Math.round(tijd * 1000), p_ronde_ms: Math.round(beste * 1000), p_drift: drift, p_auto: CARS[S.keuze].id }); } catch (e) { uit = { error: e }; }
+        const t = $('dr-bewaard');
+        if (!uit || uit.error || !uit.data) { if (t) t.textContent = 'Je tijd en munten konden niet worden opgeslagen.'; return; }
+        const d = uit.data;
+        S.munten = d.munten;
+        if (d.record) S.tijden[kaart.sleutel] = { tijd_ms: Math.round(tijd * 1000), ronde_ms: Math.round(beste * 1000) };
+        const medaille = { goud: '&#129351; <b>Goud!</b>', zilver: '&#129352; <b>Zilver!</b>', brons: '&#129353; <b>Brons!</b>' }[d.medaille] || '';
+        if (t) t.innerHTML = `${d.record ? '&#127942; <b>Nieuw record op dit circuit!</b> ' : ''}${medaille}<br>&#128176; <b>+${d.erbij} munten</b> (je hebt er nu ${d.munten})`;
+        laadLijst();
+    }
     function gebeurtenis(u) {
+        if (S.modus === 'race') { if (u.t === 'verloren') S.shake = 1; return; }
         if (u.t === 'bank') popup(`+${u.punten}${u.mult > 1 ? '  (x' + u.mult + ')' : ''}`, 'goed');
         else if (u.t === 'verloren') { popup(`Botsing! -${u.punten}`, 'fout'); S.shake = 1; }
         else if (u.t === 'kegel') popup(`+${u.punten}`, 'klein');
@@ -567,7 +665,13 @@ function driftBouw() {
         const ev = DRIFT.stap(S.a, invoer(), dt, S.kegels, S.kaart); DRIFT.stapKegels(S.kegels, dt);
         for (const u of DRIFT.tel(S.ronde, S.a, dt, ev)) gebeurtenis(u);
         if (ev.muur) S.shake = Math.max(S.shake, 0.6);
-        if (S.ronde.tijd <= 0) klaar();
+        if (ev.boost) popup('BOOST!', 'goed');
+        if (S.modus === 'race') {
+            for (const u of DRIFT.raceStap(S.race, S.a, S.kaart, dt)) {
+                if (u.t === 'ronde' && u.nr < S.race.ronden) popup('Ronde ' + u.nr + ': ' + fmt(u.tijd), 'klein');
+                if (u.t === 'finish') klaarRace();
+            }
+        } else if (S.ronde.tijd <= 0) klaar();
     }
 
     // ---------- tekenen ----------
@@ -594,7 +698,7 @@ function driftBouw() {
             S.camPos.lerp(vec, 1 - Math.exp(-7 * dt));
             S.shake = Math.max(0, S.shake - dt * 2.2);
             camera.position.set(S.camPos.x + (Math.random() - 0.5) * S.shake * 0.6, S.camPos.y + (Math.random() - 0.5) * S.shake * 0.4, S.camPos.z + (Math.random() - 0.5) * S.shake * 0.6);
-            camera.fov = 62 + sp * 0.45; camera.updateProjectionMatrix();
+            camera.fov = 62 + sp * 0.45 + (a.boostT > 0 ? 9 : 0); camera.updateProjectionMatrix();
             camera.lookAt(a.x + Math.sin(S.camYaw) * 3, 1, a.z + Math.cos(S.camYaw) * 3);
 
             // remsporen en rook zodra je slipt
@@ -613,12 +717,16 @@ function driftBouw() {
             }
             audioUpdate(slip ? DRIFT.klem(Math.abs(a.vl) / 8, 0.2, 1) : 0);
             // HUD
-            tekst('dr-punten', String(Math.floor(S.ronde.score)));
-            tekst('dr-tijd', String(Math.ceil(S.ronde.tijd)));
+            const r = S.ronde, k = $('dr-ketting');
+            if (S.modus === 'race' && S.race) { tekst('dr-punten', Math.min(S.race.ronden, S.race.rondes.length + 1) + '/' + S.race.ronden); tekst('dr-tijd', fmt(S.race.tijd)); }
+            else { tekst('dr-punten', String(Math.floor(r.score))); tekst('dr-tijd', String(Math.ceil(r.tijd))); }
             tekst('dr-kmh', Math.round(a.speed * 3.6) + ' km/u');
-            const r = S.ronde;
-            const k = $('dr-ketting');
-            if (k) { const t = r.ketting > 0 ? `DRIFT x${r.mult}   ${Math.round(r.ketting)}` : ''; if (S.laatsteTekst.k !== t) { S.laatsteTekst.k = t; k.textContent = t; } }
+            if (k) { const t = S.modus === 'drift' && r.ketting > 0 ? `DRIFT x${r.mult}   ${Math.round(r.ketting)}` : ''; if (S.laatsteTekst.k !== t) { S.laatsteTekst.k = t; k.textContent = t; } }
+            const bb = $('dr-boostbalk'), bx = $('dr-boost');
+            if (bb && bx) {      // boost-balk: vult zich tijdens een drift, en loopt leeg tijdens het boosten
+                const actief = a.boostT > 0, pct = Math.round((actief ? Math.min(1, a.boostT / 2.1) : a.lading) * 100), sl = pct + (actief ? 'a' : 'o');
+                if (S.laatsteTekst.b !== sl) { S.laatsteTekst.b = sl; bb.style.width = pct + '%'; bx.classList.toggle('actief', actief); }
+            }
         }
         for (const r of rook) if (r.leven > 0) {
             r.leven -= dt; const p = 1 - Math.max(0, r.leven) / 0.9;
@@ -690,17 +798,24 @@ function driftBouw() {
     (async () => {
         for (const k of KAARTEN) S.besten[k.sleutel] = Math.max(+opslag.get(sleutelBest(k.sleutel)) || 0, 0);
         if (me) {
-            const { data } = await sb.from('highscores').select('game,score').eq('user_id', me.id).in('game', KAARTEN.map(k => k.sleutel));
-            (data || []).forEach(r => { S.besten[r.game] = Math.max(S.besten[r.game] || 0, r.score); opslag.set(sleutelBest(r.game), String(S.besten[r.game])); });
-        }
-        S.beste = Math.max(0, ...Object.values(S.besten));
+            const [hs, st, tj] = await Promise.all([
+                sb.from('highscores').select('game,score').eq('user_id', me.id).in('game', KAARTEN.filter(k => k.modus === 'drift').map(k => k.sleutel)),
+                sb.rpc('race_status'),
+                sb.from('race_tijden').select('baan,tijd_ms,ronde_ms').eq('user_id', me.id),
+            ]);
+            (hs.data || []).forEach(r => { S.besten[r.game] = Math.max(S.besten[r.game] || 0, r.score); opslag.set(sleutelBest(r.game), String(S.besten[r.game])); });
+            if (!st.error && st.data) { S.autos = st.data.autos; S.munten = st.data.munten; S.serverOk = true; }
+            else S.status = 'Munten en auto\'s kopen werken nog niet: de database moet nog worden bijgewerkt (race.sql).';
+            (tj.data || []).forEach(r => { S.tijden[r.baan] = r; });
+        } else S.status = 'Log in om munten te verdienen en auto\'s te kopen.';
         const kid = opslag.get('mieters.drift.kaart'), ki = KAARTEN.findIndex(k => k.id === kid);
         S.kaartNr = ki >= 0 ? ki : 0;
         S.kaart = kaartCache[S.kaartNr] = DRIFT.maakKaart(KAARTEN[S.kaartNr]);
+        S.modus = S.kaart.modus;
         bouwWereld(S.kaart);
-        if ($('scores')) laadScores(S.kaart.sleutel);
+        laadLijst();
         const bewaard = opslag.get('mieters.drift.auto'), i = CARS.findIndex(c => c.id === bewaard);
-        S.keuze = i >= 0 && open(i) ? i : 0;
+        S.keuze = i >= 0 && eigen(i) ? i : 0;
         $('dr-laad').hidden = true;
         S.a = null;
         await resetKegels();
