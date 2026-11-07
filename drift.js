@@ -137,11 +137,11 @@ const DRIFT = (() => {
     // ---------- kaarten ----------
     // sleutel = de naam waaronder de scores in de database staan (elke kaart heeft zijn eigen Top 10)
     const KAARTEN = [
-        { id: 'veld', naam: 'Parkeerplaats', sleutel: 'drift', modus: 'drift', type: 'cirkel', R: 70, tekst: 'Vrij driften op een groot rond veld met kegels. Punten voor lange, schuine drifts.' },
-        { id: 'industrie', naam: 'Industrieterrein', sleutel: 'drift-industrie', modus: 'drift', type: 'rechthoek', hx: 85, hz: 55, r: 28, tekst: 'Vrij driften tussen olietanks en kegels. Punten voor lange, schuine drifts.' },
         { id: 'stad', naam: 'Stadscircuit', sleutel: 'stad', modus: 'race', ronden: 3, medailles: [95000, 115000, 140000], type: 'baan', breedte: 20, punten: [[-100, -70], [-20, -70], [60, -70], [100, -62], [122, -35], [122, 5], [105, 35], [75, 48], [40, 45], [20, 25], [0, 10], [-25, 18], [-45, 40], [-70, 62], [-105, 60], [-130, 35], [-135, -10], [-125, -45]], tekst: 'Race 3 ronden: een lange rechte start, ruime bochten en een slinger in het midden.' },
         { id: 'berg', naam: 'Bergcircuit', sleutel: 'berg', modus: 'race', ronden: 3, medailles: [100000, 120000, 145000], type: 'baan', breedte: 16, punten: [[-90, -50], [-30, -55], [30, -45], [74, -18], [100, 14], [108, 46], [84, 72], [44, 66], [18, 46], [0, 18], [-20, -6], [-46, 8], [-66, 36], [-92, 66], [-126, 52], [-134, 10], [-114, -22], [-98, -40]], tekst: 'Race 3 ronden: smal en kronkelig met scherpe haarspeldbochten. Met drift houd je snelheid.' },
         { id: 'speedway', naam: 'Speedway', sleutel: 'speedway', modus: 'race', ronden: 3, medailles: [95000, 115000, 140000], type: 'baan', breedte: 24, punten: (() => { const p = []; for (let i = 0; i < 18; i++) { const t = (i / 18) * 2 * Math.PI; let z = 70 * Math.sin(t); if (i === 5) z += 12; if (i === 6) z -= 12; if (i === 7) z += 4.8; p.push([150 * Math.cos(t), z]); } return p; })(), tekst: 'Race 3 ronden: een supersnel ovaal met een chicane. Hier haal je de hoogste snelheid.' },
+        { id: 'veld', naam: 'Parkeerplaats', sleutel: 'drift', modus: 'drift', type: 'cirkel', R: 70, tekst: 'Vrij driften op een groot rond veld met kegels. Geen munten, wel punten en een plek in de Top 10.' },
+        { id: 'industrie', naam: 'Industrieterrein', sleutel: 'drift-industrie', modus: 'drift', type: 'rechthoek', hx: 85, hz: 55, r: 28, tekst: 'Vrij driften tussen olietanks en kegels. Geen munten, wel punten en een plek in de Top 10.' },
     ];
     // zet een gesloten lijn om in punten met gelijke onderlinge afstand, plus de rijrichting (tx, tz)
     function herbemonster(p, afstand) {
@@ -295,7 +295,7 @@ async function drift() {
                 <button class="dr-mini dr-autogas" id="dr-autogas">Auto-gas: aan</button>
             </div>
         </div>
-        <p class="intro dr-uitleg">Pijltjes of W, A, S en D: sturen en gas &middot; <b>Spatie: handrem</b> &middot; Esc: terug naar de garage. <b>Drift om je boost op te laden:</b> laat je de drift los, dan krijg je een zetje. Rij je een race, dan telt je snelste tijd. Met elke rit verdien je munten, en daarmee koop je nieuwe auto's. Auto's: Kenney.nl (CC0).</p></div>`;
+        <p class="intro dr-uitleg">Pijltjes of W, A, S en D: sturen en gas &middot; <b>Spatie: handrem</b> &middot; Esc: terug naar de garage. <b>Drift om je boost op te laden:</b> laat je de drift los, dan krijg je een zetje. Rij je een race, dan telt je snelste tijd. Met elke race verdien je munten, en daarmee koop je nieuwe auto's. Vrij driften levert alleen punten en een plek in de Top 10 op. Auto's: Kenney.nl (CC0).</p></div>`;
     try { await driftLaadThree(); } catch (e) { if ($('dr-laad')) $('dr-laad').textContent = 'Het 3D-spel kon niet worden geladen. Controleer je internet en probeer het opnieuw.'; return; }
     if (!$('dr-canvas')) return;                    // je was al weggegaan
     driftBouw();
@@ -613,16 +613,14 @@ function driftBouw() {
         m.innerHTML = `<div class="dr-titel">Rit afgelopen! <small>${esc(kaart.naam)}</small></div><div class="dr-groot">${score}</div><p>punten</p>
             <p>${score > oudKaart && score > 0 ? '&#127942; <b>Nieuw record op deze kaart!</b>' : 'Jouw beste op deze kaart: <b>' + S.besten[kaart.sleutel] + '</b>'}</p>
             <p class="dr-beste">Kegels omgereden: ${r.kegels} &middot; Langste drift: ${r.langste.toFixed(1)} s</p>
-            <p class="dr-beste" id="dr-bewaard">${me ? (score > 0 ? 'Bezig met opslaan...' : '') : 'Log in om punten, munten en een plek in de Top 10 te krijgen.'}</p>
+            <p class="dr-beste" id="dr-bewaard">${me ? (score > 0 ? 'Bezig met opslaan...' : '') : 'Log in om een plek in de Top 10 te krijgen.'}</p>
             <div class="dr-rij2"><button class="dr-start" id="dr-opnieuw">Opnieuw</button><button class="dr-start twee" id="dr-garage">Garage</button></div>`;
         $('dr-opnieuw').onclick = startRit; $('dr-garage').onclick = naarGarage;
         if (me && score > 0) {
-            let fout = null, bel = null;
+            let fout = null;
             try { ({ error: fout } = await sb.rpc('bewaar_score', { p_game: kaart.sleutel, p_score: score })); } catch (e) { fout = e; }
-            try { const r2 = await sb.rpc('drift_beloning', { p_kaart: kaart.sleutel, p_score: score }); if (!r2.error) bel = r2.data; } catch (e) {}
-            if (bel) S.munten = bel.munten;
             const t = $('dr-bewaard');
-            if (t) t.innerHTML = (bel ? `&#128176; <b>+${bel.erbij} munten</b> (je hebt er nu ${bel.munten}). ` : '') + (fout ? 'Je score kon niet in de Top 10 worden gezet.' : '');
+            if (t) t.textContent = fout ? 'Je score kon niet in de Top 10 worden gezet.' : 'Je score staat in de Top 10-lijst als hij hoog genoeg is.';
             if (!fout) laadLijst();
         }
     }
