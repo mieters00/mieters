@@ -294,3 +294,9 @@ canvas.snake { width: 100%; max-width: 510px; display: block; border-radius: 0 0
 .dr-koop:disabled { opacity: .55; cursor: not-allowed; filter: none; }
 .dr-modus { font-size: 12px; opacity: .82; margin-left: 6px; }
 .dr-medailles { display: block; margin-top: 2px; }
+
+/* Snake: keuze 1, 3 of 5 appels */
+.snake-keuze { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; max-width: 510px; }
+.snake-keuze span { font-weight: 600; margin-right: 4px; }
+.snake-keuze button { background: var(--kaart); color: var(--tekst); border: 1px solid var(--lijn); padding: 6px 18px; font-weight: 800; }
+.snake-keuze button.actief { background: var(--primair); color: var(--pt); border-color: var(--primair); }

@@ -653,7 +653,7 @@ function games(spel) {
         <div class="spel-tabs">${Object.entries(SPELLEN).map(([k, s]) => `<a href="#/games/${k}" class="${k === spel ? 'actief' : ''}">${s.naam}</a>`).join('')}</div>
         <div class="spel-wrap"><div id="speelveld"></div><div id="scores"></div></div>`;
     ({ snake, wordle, schaken: schaakLobby, dammen: damLobby, drift })[spel]();
-    laadScores(spel);
+    if (spel !== 'snake') laadScores(spel);      // Snake laadt zelf de Top 10 van de gekozen variant
 }
 
 // Bewaart je score alleen als het je beste is
@@ -664,13 +664,14 @@ async function bewaarScore(spel, score) {
     laadScores(spel);
 }
 
+const snakeTitel = k => ({ snake: 'Top 10 - 1 appel', 'snake-3': 'Top 10 - 3 appels', 'snake-5': 'Top 10 - 5 appels' })[k];
 async function laadScores(spel) {
     const el = $('scores');
     if (!el) return;
     if ((SPELLEN[spel] || {}).geenScores) { el.innerHTML = ''; return; }
     const { data } = await sb.from('highscores').select('score,profiles(username,avatar)')
         .eq('game', spel).order('score', { ascending: false }).limit(10);
-    el.innerHTML = `<h3>${typeof scoreTitel === 'function' ? esc(scoreTitel(spel)) : 'Top 10'}</h3>` + ((data || []).map((r, i) => `
+    el.innerHTML = `<h3>${snakeTitel(spel) || (typeof scoreTitel === 'function' ? esc(scoreTitel(spel)) : 'Top 10')}</h3>` + ((data || []).map((r, i) => `
         <div class="score-rij"><span>${i + 1}.</span>${avatar(r.profiles, 22)}
         <strong>${esc(r.profiles && r.profiles.username)}</strong><span class="punten">${r.score}</span></div>`).join('')
         || '<p class="leeg">Nog geen scores.</p>') + (me ? '' : '<p class="intro">Log in om je score te bewaren.</p>');
@@ -678,18 +679,21 @@ async function laadScores(spel) {
 
 function snake() {
     const COLS = 17, ROWS = 15, S = 30, TICK = 130, DPR = 2;
-    $('speelveld').innerHTML = `<div class="snake-wrap">
+    $('speelveld').innerHTML = `<div class="snake-keuze" id="sn-keuze"><span>Aantal appels:</span><button data-n="1">1</button><button data-n="3">3</button><button data-n="5">5</button></div><div class="snake-wrap">
         <div class="snake-balk"><span class="appel-icoon"></span><b id="sn-score">0</b><span class="beker">Beste</span><b id="sn-best">0</b></div>
         <canvas class="snake" width="${COLS * S * DPR}" height="${ROWS * S * DPR}"></canvas></div>
         <div class="pijlen"><button data-d="0,-1">↑</button><button data-d="-1,0">←</button><button data-d="0,1">↓</button><button data-d="1,0">→</button></div>
-        <p class="intro">Pijltjestoetsen of WASD. Op je telefoon veeg je over het veld.</p>`;
+        <p class="intro">Pijltjestoetsen of WASD. Op je telefoon veeg je over het veld. Kies hierboven met hoeveel appels tegelijk je speelt: elke variant heeft een eigen Top 10.</p>`;
     const cv = document.querySelector('canvas.snake'), ctx = cv.getContext('2d');
     ctx.scale(DPR, DPR);
-    let slang, vorige, richting, wachtrij, appel, score, best = 0, stand, acc = 0, laatste = performance.now(), raf, pop = 0;
+    let slang, vorige, richting, wachtrij, appels = [], appelTal = 1, score, best = 0, stand, acc = 0, laatste = performance.now(), raf, pop = 0;
 
-    function zetAppel() {
-        do { appel = { x: Math.floor(Math.random() * COLS), y: Math.floor(Math.random() * ROWS) }; }
-        while (slang.some(s => s.x === appel.x && s.y === appel.y));
+    // Een nieuwe appel op een lege plek (niet op de slang en niet op een andere appel). Is er geen plek meer, dan komt er geen appel bij.
+    function nieuweAppel() {
+        const vrij = (x, y) => !slang.some(s => s.x === x && s.y === y) && !appels.some(a => a.x === x && a.y === y);
+        for (let i = 0; i < 200; i++) { const x = Math.floor(Math.random() * COLS), y = Math.floor(Math.random() * ROWS); if (vrij(x, y)) return { x, y }; }
+        for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) if (vrij(x, y)) return { x, y };
+        return null;
     }
     function nieuw() {
         slang = [{ x: 4, y: 7 }, { x: 3, y: 7 }, { x: 2, y: 7 }];
@@ -700,12 +704,13 @@ function snake() {
         stand = 'wacht';
         acc = 0;
         $('sn-score').textContent = '0';
-        zetAppel();
+        appels = [];
+        for (let i = 0; i < appelTal; i++) { const a = nieuweAppel(); if (a) appels.push(a); }
     }
     async function dood() {
         stand = 'dood';
         if (score > best) { best = score; $('sn-best').textContent = best; }
-        await bewaarScore('snake', score);
+        await bewaarScore(sleutel(), score);
     }
     function stap() {
         if (wachtrij.length) {
@@ -713,12 +718,12 @@ function snake() {
             if (!(r.x === -richting.x && r.y === -richting.y)) richting = r;
         }
         const kop = { x: slang[0].x + richting.x, y: slang[0].y + richting.y };
-        const eet = kop.x === appel.x && kop.y === appel.y;
+        const eetNr = appels.findIndex(a => a.x === kop.x && a.y === kop.y), eet = eetNr >= 0;
         const lichaam = eet ? slang : slang.slice(0, -1);        // de staart schuift weg, tenzij we groeien
         if (kop.x < 0 || kop.y < 0 || kop.x >= COLS || kop.y >= ROWS || lichaam.some(s => s.x === kop.x && s.y === kop.y)) return dood();
         vorige = slang.map(s => ({ ...s }));
         slang.unshift(kop);
-        if (eet) { score++; pop = 1; $('sn-score').textContent = score; zetAppel(); }
+        if (eet) { score++; pop = 1; $('sn-score').textContent = score; const a = nieuweAppel(); if (a) appels[eetNr] = a; else appels.splice(eetNr, 1); }
         else slang.pop();
     }
     function richt(dx, dy) {
@@ -744,14 +749,16 @@ function snake() {
             ctx.fillStyle = (r + c) % 2 ? '#a2d149' : '#aad751';
             ctx.fillRect(c * S, r * S, S, S);
         }
-        // appel
-        const ax = (appel.x + .5) * S, ay = (appel.y + .5) * S, ra = S * 0.38 * (1 + Math.sin(performance.now() / 300) * 0.04);
-        ctx.fillStyle = '#e7471d';
-        ctx.beginPath(); ctx.arc(ax, ay + 1, ra, 0, 7); ctx.fill();
-        ctx.fillStyle = 'rgba(255,255,255,.4)';
-        ctx.beginPath(); ctx.arc(ax - ra * .35, ay - ra * .25, ra * .25, 0, 7); ctx.fill();
-        ctx.fillStyle = '#3f8a2a';
-        ctx.beginPath(); ctx.ellipse(ax + 3, ay - ra - 1, 5, 2.5, -0.5, 0, 7); ctx.fill();
+        // appels
+        for (const appel of appels) {
+            const ax = (appel.x + .5) * S, ay = (appel.y + .5) * S, ra = S * 0.38 * (1 + Math.sin(performance.now() / 300) * 0.04);
+            ctx.fillStyle = '#e7471d';
+            ctx.beginPath(); ctx.arc(ax, ay + 1, ra, 0, 7); ctx.fill();
+            ctx.fillStyle = 'rgba(255,255,255,.4)';
+            ctx.beginPath(); ctx.arc(ax - ra * .35, ay - ra * .25, ra * .25, 0, 7); ctx.fill();
+            ctx.fillStyle = '#3f8a2a';
+            ctx.beginPath(); ctx.ellipse(ax + 3, ay - ra - 1, 5, 2.5, -0.5, 0, 7); ctx.fill();
+        }
         // slang: de lichaamsdelen glijden vloeiend naar hun volgende plek
         const pts = slang.map((s, i) => {
             const v = vorige[i] || vorige[vorige.length - 1];
@@ -793,6 +800,7 @@ function snake() {
         if (e.ctrlKey || e.metaKey || e.altKey) return;
         const k = e.key.toLowerCase();
         if (RICHTINGEN[k]) { e.preventDefault(); richt(...RICHTINGEN[k]); }
+        else if ((k === '1' || k === '3' || k === '5') && stand !== 'speel') kies(+k);
         else if ((k === ' ' || k === 'enter') && stand === 'dood') { e.preventDefault(); nieuw(); }
     };
     // Swipen werkt direct tijdens de beweging, niet pas als je je vinger loslaat
@@ -818,9 +826,22 @@ function snake() {
     document.querySelectorAll('.pijlen button').forEach(b => b.onclick = () => richt(...b.dataset.d.split(',').map(Number)));
     cleanup.push(() => { cancelAnimationFrame(raf); document.removeEventListener('keydown', toets); });
 
-    if (me) sb.from('highscores').select('score').eq('game', 'snake').eq('user_id', me.id).maybeSingle()
-        .then(({ data }) => { if (data && $('sn-best')) { best = data.score; $('sn-best').textContent = best; } });
-    nieuw();
+    // 1 appel gebruikt de oude Top 10 ('snake'), 3 en 5 appels hebben een eigen lijst
+    function sleutel() { return appelTal === 1 ? 'snake' : 'snake-' + appelTal; }
+    function laadBest() {
+        best = 0; $('sn-best').textContent = '0';
+        if (me) sb.from('highscores').select('score').eq('game', sleutel()).eq('user_id', me.id).maybeSingle()
+            .then(({ data }) => { if (data && $('sn-best')) { best = data.score; $('sn-best').textContent = best; } });
+    }
+    function kies(n) {
+        appelTal = n;
+        try { localStorage.setItem('mieters.snake.appels', String(n)); } catch (e) {}
+        document.querySelectorAll('#sn-keuze button').forEach(b => b.classList.toggle('actief', +b.dataset.n === n));
+        nieuw(); laadBest(); laadScores(sleutel());
+    }
+    document.querySelectorAll('#sn-keuze button').forEach(b => b.onclick = () => { b.blur(); kies(+b.dataset.n); });
+    let bewaard = 1; try { bewaard = +localStorage.getItem('mieters.snake.appels') || 1; } catch (e) {}
+    kies([1, 3, 5].includes(bewaard) ? bewaard : 1);
     raf = requestAnimationFrame(lus);
 }
 
