@@ -26,29 +26,84 @@ function checkFile(file, ruw = false) {
         throw new Error('Kies een jpg, png, gif of webp. Een GIF mag maximaal 5 MB zijn.');
 }
 // Verkleint grote foto's tot maximaal 1600 px. Dat scheelt laadtijd, en de verborgen gegevens in een foto (zoals de GPS-locatie) verdwijnen.
-async function verkleind(file) {
-    if (file.type === 'image/gif' || file.size < 400 * 1024) return file;
+async function verkleind(file, max = 1600, altijd = false) {
+    if (!altijd && (file.type === 'image/gif' || file.size < 400 * 1024)) return file;
     try {
         const bmp = await createImageBitmap(file);
-        const f = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+        const f = Math.min(1, max / Math.max(bmp.width, bmp.height));
         const cv = document.createElement('canvas');
-        cv.width = Math.round(bmp.width * f);
-        cv.height = Math.round(bmp.height * f);
+        cv.width = Math.max(1, Math.round(bmp.width * f));
+        cv.height = Math.max(1, Math.round(bmp.height * f));
         cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height);
         bmp.close();
-        const blob = await new Promise(r => cv.toBlob(r, 'image/webp', 0.85));
-        return blob && TYPES[blob.type] && blob.size < file.size ? new File([blob], 'foto', { type: blob.type }) : file;
+        const blob = await new Promise(r => cv.toBlob(r, 'image/webp', altijd ? 0.8 : 0.85));
+        return blob && TYPES[blob.type] && (altijd || blob.size < file.size) ? new File([blob], 'foto', { type: blob.type }) : file;
     } catch (e) { return file; }
+}
+// Een foto op de Foto's-pagina krijgt ook een miniatuur (_t.webp), want in het raster hoeft niet elke foto op volle grootte geladen te worden
+const thumbPad = p => p.replace(/\.[^./]+$/, '_t.webp');
+const thumbUrl = p => pub('photos', thumbPad(p));
+const fotoImg = p => `<img loading="lazy" decoding="async" src="${esc(thumbUrl(p))}" data-orig="${esc(pub('photos', p))}">`;
+// bestaat de miniatuur nog niet (oude foto), dan valt de browser terug op de originele foto
+document.addEventListener('error', e => {
+    const i = e.target;
+    if (i && i.tagName === 'IMG' && i.dataset && i.dataset.orig && i.src !== i.dataset.orig) i.src = i.dataset.orig;
+}, true);
+async function maakMiniatuur(bron, pad) {
+    const klein = await verkleind(bron, 400, true);
+    const { error } = await sb.storage.from('photos').upload(thumbPad(pad), klein, { cacheControl: '31536000', contentType: klein.type });
+    if (error) throw error;
 }
 async function upload(bucket, file, uid) {
     checkFile(file, true);
-    file = await verkleind(file);
+    // Profielfoto's worden maar klein getoond: 192 px is ruim genoeg en scheelt veel data. Foto's gaan naar maximaal 1600 px.
+    file = await verkleind(file, bucket === 'avatars' ? 192 : 1600, bucket === 'avatars');
     checkFile(file);
     const pad = `${uid}/${crypto.randomUUID()}.${TYPES[file.type]}`;
     // De bestandsnaam is willekeurig en verandert nooit, dus de browser mag hem lang onthouden
     const { error } = await sb.storage.from(bucket).upload(pad, file, { cacheControl: '31536000', contentType: file.type });
     if (error) throw error;
+    if (bucket === 'photos') { try { await maakMiniatuur(file, pad); } catch (e) {} }
     return pad;
+}
+
+// Oude, te grote bestanden van jezelf worden eenmalig verkleind (alleen jouw eigen profielfoto en foto's), zodat de site minder data kost
+async function optimaliseerBestanden() {
+    if (!me || window.__optimaliseerd) return;
+    window.__optimaliseerd = true;
+    const vlag = 'mieters.opt1.' + me.id;
+    try {
+        if (localStorage.getItem(vlag) === '1') return;
+        const haal = async (bucket, pad) => { const r = await fetch(pub(bucket, pad)); if (!r.ok) throw new Error('niet gevonden'); return r.blob(); };
+        if (me.avatar) {                                  // 1. je profielfoto
+            const naam = me.avatar.split('/').pop();
+            const { data: lijst } = await sb.storage.from('avatars').list(me.id, { limit: 1000 });
+            const info = (lijst || []).find(f => f.name === naam);
+            if (info && info.metadata && info.metadata.size > 100 * 1024) {
+                const blob = await haal('avatars', me.avatar);
+                const klein = await verkleind(new File([blob], 'a', { type: blob.type }), 192, true);
+                if (klein.size < blob.size) {
+                    const pad = `${me.id}/${crypto.randomUUID()}.${TYPES[klein.type]}`;
+                    const { error } = await sb.storage.from('avatars').upload(pad, klein, { cacheControl: '31536000', contentType: klein.type });
+                    if (!error) {
+                        const { error: e2 } = await sb.from('profiles').update({ avatar: pad }).eq('id', me.id);
+                        if (e2) await sb.storage.from('avatars').remove([pad]);
+                        else { await sb.storage.from('avatars').remove([me.avatar]); me.avatar = pad; }
+                    }
+                }
+            }
+        }
+        const { data: fotos } = await sb.storage.from('photos').list(me.id, { limit: 1000 });   // 2. miniaturen voor je foto's
+        const namen = new Set((fotos || []).map(f => f.name));
+        for (const f of fotos || []) {
+            if (/_t\.[a-z]+$/.test(f.name) || !f.metadata || f.metadata.size < 80 * 1024) continue;
+            const pad = `${me.id}/${f.name}`;
+            if (namen.has(thumbPad(pad).split('/').pop())) continue;
+            const blob = await haal('photos', pad);
+            await maakMiniatuur(new File([blob], 'f', { type: blob.type }), pad);
+        }
+        localStorage.setItem(vlag, '1');
+    } catch (e) { /* het is een extraatje: bij een fout probeert de site het de volgende keer opnieuw */ window.__optimaliseerd = false; }
 }
 
 async function laadMij() {
@@ -57,6 +112,7 @@ async function laadMij() {
     if (session) {
         const { data } = await sb.from('profiles').select('id,username,avatar').eq('id', session.user.id).single();
         me = data;
+        if (me) setTimeout(optimaliseerBestanden, 6000);
     }
 }
 
@@ -127,7 +183,7 @@ async function home() {
     const { data } = await sb.from('photos').select('path,description,profiles(username,avatar)').order('created_at', { ascending: false }).limit(8);
     if (!$('nieuw')) return;
     $('nieuw').innerHTML = (data || []).map(r => `
-        <div class="foto-item"><img loading="lazy" decoding="async" src="${esc(pub('photos', r.path))}">
+        <div class="foto-item">${fotoImg(r.path)}
         <div class="rij">${avatar(r.profiles)}<p>${esc(r.profiles && r.profiles.username)}</p></div>
         ${r.description ? `<p class="beschr">${esc(r.description)}</p>` : ''}</div>`).join('') || '<p class="leeg">Nog geen foto\'s.</p>';
     $('nieuw').onclick = e => { if (e.target.tagName === 'IMG' && !e.target.classList.contains('av')) location.hash = '#/photos'; };
@@ -203,7 +259,7 @@ async function photos() {
         $('meer-fotos').hidden = !(data && data.length > aantal);
         $('fotos').innerHTML = (data || []).slice(0, aantal).map(r => `
             <div class="foto-item">
-                <img loading="lazy" decoding="async" src="${esc(pub('photos', r.path))}">
+                ${fotoImg(r.path)}
                 <div class="rij">${avatar(r.profiles)}<p>${esc(r.profiles && r.profiles.username)}</p></div>
                 ${r.description ? `<p class="beschr">${esc(r.description).replace(/@([a-zA-Z0-9_]+)/g, '<strong class="mention">@$1</strong>')}</p>` : ''}
             </div>`).join('');
@@ -211,7 +267,7 @@ async function photos() {
     }
     $('fotos').onclick = e => {
         if (e.target.tagName !== 'IMG') return;
-        $('overlay').querySelector('img').src = e.target.src;
+        $('overlay').querySelector('img').src = e.target.dataset.orig || e.target.src;
         $('overlay').hidden = false;
     };
     $('overlay').onclick = () => { $('overlay').hidden = true; };
@@ -223,7 +279,7 @@ async function photos() {
         try {
             const pad = await upload('photos', f.file.files[0], me.id);
             const { error } = await sb.from('photos').insert({ user_id: me.id, path: pad, description: f.desc.value.trim() });
-            if (error) { await sb.storage.from('photos').remove([pad]); throw error; }
+            if (error) { await sb.storage.from('photos').remove([pad, thumbPad(pad)]); throw error; }
             f.reset();
             $('fout').textContent = '';
             laad();
@@ -247,7 +303,7 @@ async function profile() {
         <button id="uit">Uitloggen</button></div>
         <h3>Mijn foto's</h3>
         <div class="fotos">${(fotos || []).map(r => `
-            <div class="foto-item klein"><img loading="lazy" decoding="async" src="${esc(pub('photos', r.path))}">
+            <div class="foto-item klein">${fotoImg(r.path)}
             <button class="x" data-id="${r.id}" data-pad="${esc(r.path)}">×</button>
             ${r.description ? `<p class="beschr">${esc(r.description)}</p>` : ''}</div>`).join('')}</div>
         <p class="gevaar"><a href="#" id="del">Account verwijderen</a></p>`;
@@ -267,7 +323,8 @@ async function profile() {
             const pad = await upload('avatars', e.target.file.files[0], me.id);
             const { error } = await sb.from('profiles').update({ avatar: pad }).eq('id', me.id);
             if (error) throw error;
-            me.avatar = pad;
+            const oud = me.avatar; me.avatar = pad;
+            if (oud) sb.storage.from('avatars').remove([oud]);      // geen oude bestanden laten liggen
             profile();
         } catch (err) { $('fout').textContent = err.message; }
     };
@@ -285,7 +342,7 @@ async function profile() {
     app.querySelectorAll('.x').forEach(b => b.onclick = async () => {
         if (!confirm('Wil je deze foto verwijderen?')) return;
         await sb.from('photos').delete().eq('id', b.dataset.id);
-        await sb.storage.from('photos').remove([b.dataset.pad]);
+        await sb.storage.from('photos').remove([b.dataset.pad, thumbPad(b.dataset.pad)]);
         profile();
     });
 }
