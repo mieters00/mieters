@@ -1,3 +1,4 @@
+
 :root { --bg:#f6f5f1; --kaart:#fff; --tekst:#1d231f; --zacht:#6a716b; --lijn:#dcdad2; --primair:#0b7a5e; --pt:#fff; --header:#13342c; --accent:#e8b84a; --bubbel:#fff; --eigen:#d7efe3; --chatbg:#ecebe5; --r:8px; }
 @media (prefers-color-scheme: dark) { :root { --bg:#0e1311; --kaart:#171e1b; --tekst:#e6ece8; --zacht:#8f9c95; --lijn:#2a3530; --primair:#2fbf93; --pt:#06130e; --header:#09100d; --accent:#e8b84a; --bubbel:#1f2824; --eigen:#17493a; --chatbg:#111815; } }
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -300,3 +301,9 @@ canvas.snake { width: 100%; max-width: 510px; display: block; border-radius: 0 0
 .snake-keuze span { font-weight: 600; margin-right: 4px; }
 .snake-keuze button { background: var(--kaart); color: var(--tekst); border: 1px solid var(--lijn); padding: 6px 18px; font-weight: 800; }
 .snake-keuze button.actief { background: var(--primair); color: var(--pt); border-color: var(--primair); }
+
+/* Snake: spelmodi */
+.snake-keuze { flex-wrap: wrap; }
+.snake-modi { max-width: 560px; }
+.snake-modi button { padding: 4px 11px; font-size: 13px; }
+.snake-uitleg { color: var(--zacht); font-size: 14px; margin: 0 0 10px; max-width: 510px; min-height: 1.5em; }
