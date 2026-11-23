@@ -702,6 +702,7 @@ const SPELLEN = {
     schaken: { naam: 'Schaken', geenScores: true },
     dammen: { naam: 'Dammen', geenScores: true },
     drift: { naam: 'Drift' },
+    flappy: { naam: 'Flappy' },
 };
 
 function games(spel) {
@@ -709,7 +710,7 @@ function games(spel) {
     app.innerHTML = `<h2>Spellen</h2>
         <div class="spel-tabs">${Object.entries(SPELLEN).map(([k, s]) => `<a href="#/games/${k}" class="${k === spel ? 'actief' : ''}">${s.naam}</a>`).join('')}</div>
         <div class="spel-wrap"><div id="speelveld"></div><div id="scores"></div></div>`;
-    ({ snake, wordle, schaken: schaakLobby, dammen: damLobby, drift })[spel]();
+    ({ snake, wordle, schaken: schaakLobby, dammen: damLobby, drift, flappy })[spel]();
     if (spel !== 'snake') laadScores(spel);      // Snake laadt zelf de Top 10 van de gekozen variant
 }
 
