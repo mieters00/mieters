@@ -307,3 +307,8 @@ canvas.snake { width: 100%; max-width: 510px; display: block; border-radius: 0 0
 .snake-modi { max-width: 560px; }
 .snake-modi button { padding: 4px 11px; font-size: 13px; }
 .snake-uitleg { color: var(--zacht); font-size: 14px; margin: 0 0 10px; max-width: 510px; min-height: 1.5em; }
+
+/* Flappy */
+.flappy-wrap { max-width: 360px; }
+.flappy-balk { display: flex; justify-content: space-between; background: #2f6f8f; color: #fff; padding: 8px 14px; border-radius: var(--r) var(--r) 0 0; font-size: 16px; }
+canvas.flappy { width: 100%; max-width: 360px; aspect-ratio: 2 / 3; display: block; border-radius: 0 0 var(--r) var(--r); touch-action: none; cursor: pointer; user-select: none; -webkit-user-select: none; }
